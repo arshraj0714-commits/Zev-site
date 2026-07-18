@@ -1,0 +1,104 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+
+export interface Product {
+  id: string;
+  name: string;
+  description: string;
+  image?: string | null;
+  codeLink?: string | null;
+  folder?: string | null;
+  type: string;
+  price: number;
+  tags?: string | null;
+  featured: boolean;
+  salesCount: number;
+  createdAt: string;
+}
+
+export interface StockItem {
+  id: string;
+  name: string;
+  description: string;
+  image?: string | null;
+  category?: string | null;
+  price: number;
+  quantity: number;
+  soldCount: number;
+  tags?: string | null;
+  createdAt: string;
+}
+
+export interface OpenSourceItem {
+  id: string;
+  name: string;
+  description: string;
+  image?: string | null;
+  codeLink?: string | null;
+  category?: string | null;
+  tags?: string | null;
+  stars: number;
+  createdAt: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  name: string;
+  symbol: string;
+  chain: string;
+  explorer: string;
+  explorerTx: string;
+  color: string;
+  address: string;
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  return res.json();
+}
+
+export function useProducts(type: "all" | "paid" | "free" = "all") {
+  return useQuery({
+    queryKey: ["products", type],
+    queryFn: () => fetchJson<{ products: Product[] }>(`/api/products?type=${type}`),
+  });
+}
+
+export function useStock() {
+  return useQuery({
+    queryKey: ["stock"],
+    queryFn: () => fetchJson<{ items: StockItem[] }>(`/api/stock`),
+  });
+}
+
+export function useOpenSource() {
+  return useQuery({
+    queryKey: ["opensource"],
+    queryFn: () => fetchJson<{ items: OpenSourceItem[] }>(`/api/opensource`),
+  });
+}
+
+export function useStats() {
+  return useQuery({
+    queryKey: ["stats"],
+    queryFn: () => fetchJson<{ stats: { vouches: number; productsSold: number } }>(`/api/stats`),
+  });
+}
+
+export function usePrices() {
+  return useQuery({
+    queryKey: ["prices"],
+    queryFn: () =>
+      fetchJson<{ prices: Record<string, number>; methods: PaymentMethod[] }>(`/api/prices`),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useOrders() {
+  return useQuery({
+    queryKey: ["orders"],
+    queryFn: () => fetchJson<{ orders: any[] }>(`/api/orders`),
+  });
+}
