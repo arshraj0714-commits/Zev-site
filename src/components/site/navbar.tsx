@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Shield, Sparkles } from "lucide-react";
+import { Menu, X, Shield, ShieldCheck, Sparkles, LogOut } from "lucide-react";
 import { useZev, type ViewId } from "@/lib/store";
 import { ZevWordmark } from "./logo";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ const NAV_ITEMS: { id: ViewId; label: string }[] = [
 ];
 
 export function Navbar() {
-  const { view, go, mobileNavOpen, setMobileNav, adminMode, toggleAdmin } = useZev();
+  const { view, go, mobileNavOpen, setMobileNav, admin, logout } = useZev();
 
   return (
     <header className="sticky top-0 z-50 w-full">
@@ -53,18 +53,38 @@ export function Navbar() {
           </nav>
 
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleAdmin}
-              className={cn(
-                "hidden sm:flex gap-2",
-                adminMode && "text-gold"
-              )}
-            >
-              <Shield className="h-4 w-4" />
-              {adminMode ? "Admin" : "User"}
-            </Button>
+            {admin ? (
+              <div className="hidden sm:flex items-center gap-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => go("upload")}
+                  className="gap-2 text-gold"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  <span className="max-w-[100px] truncate">{admin.name.split(" ")[0]}</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={logout}
+                  className="text-muted-foreground hover:text-rose-400"
+                  aria-label="Logout"
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => go("upload")}
+                className="hidden sm:flex gap-2"
+              >
+                <Shield className="h-4 w-4" />
+                Admin Login
+              </Button>
+            )}
             <Button
               onClick={() => go("products")}
               size="sm"
@@ -110,15 +130,38 @@ export function Navbar() {
                   {item.label}
                 </button>
               ))}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleAdmin}
-                className="mt-2 justify-start gap-2"
-              >
-                <Shield className="h-4 w-4" />
-                {adminMode ? "Admin Mode: ON" : "Admin Mode: OFF"}
-              </Button>
+              {admin ? (
+                <div className="mt-2 flex items-center gap-2 px-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => go("upload")}
+                    className="flex-1 justify-start gap-2 text-gold"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    {admin.name.split(" ")[0]}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={logout}
+                    className="gap-2 text-muted-foreground hover:text-rose-400"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Logout
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => go("upload")}
+                  className="mt-2 justify-start gap-2"
+                >
+                  <Shield className="h-4 w-4" />
+                  Admin Login
+                </Button>
+              )}
             </nav>
           </motion.div>
         )}

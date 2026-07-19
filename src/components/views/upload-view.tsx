@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Upload, Package, Boxes, Code2, Image as ImageIcon, X, Plus,
-  CheckCircle2, Loader2, Trash2, ShieldAlert,
+  CheckCircle2, Loader2, Trash2, ShieldCheck, Lock, Mail, LogOut,
 } from "lucide-react";
 import { SectionHeading } from "@/components/site/section-heading";
 import { Button } from "@/components/ui/button";
@@ -87,8 +87,97 @@ function ImageUpload({
   );
 }
 
+// ---------- Login screen ----------
+function LoginScreen() {
+  const { setAuth } = useZev();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email || !password) {
+      toast.error("Enter email and password");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Login failed");
+      setAuth(data.user, data.token);
+      toast.success(`Welcome back, ${data.user.name.split(" ")[0]}!`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mx-auto mt-8 max-w-md"
+    >
+      <div className="rounded-3xl glass-strong p-8 ring-1 ring-border/40">
+        <div className="flex flex-col items-center text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-gold/20 to-emerald-500/20 ring-1 ring-border/50 animate-pulse-glow">
+            <Lock className="h-8 w-8 text-gold" />
+          </div>
+          <h2 className="mt-4 text-2xl font-bold">Admin Access</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Sign in to manage products, stock, and orders.
+          </p>
+        </div>
+
+        <form onSubmit={handleLogin} className="mt-6 space-y-4">
+          <div>
+            <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</Label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="glass"
+              placeholder="admin@email.com"
+              autoComplete="email"
+            />
+          </div>
+          <div>
+            <Label className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Password</Label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="glass"
+              placeholder="••••••••"
+              autoComplete="current-password"
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={loading}
+            className="w-full gap-2 bg-gradient-to-r from-gold to-amber-400 text-black hover:from-amber-400 hover:to-gold"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+            {loading ? "Signing in..." : "Sign In"}
+          </Button>
+        </form>
+
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          🔒 Head admin only. Unauthorized access is logged.
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
 export function UploadView() {
-  const { adminMode, toggleAdmin } = useZev();
+  const { admin, authLoading, logout } = useZev();
   const qc = useQueryClient();
 
   // Product form
@@ -212,237 +301,246 @@ export function UploadView() {
     if (res.ok) { toast.success("Deleted"); qc.invalidateQueries({ queryKey: ["opensource"] }); }
   }
 
+  // Loading state
+  if (authLoading) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-24 sm:px-6 lg:px-8">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-gold" />
+          <p className="text-sm text-muted-foreground">Loading admin panel...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not logged in → show login
+  if (!admin) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+        <SectionHeading
+          eyebrow="Admin Panel"
+          title="Upload & Manage"
+          subtitle="Sign in with your admin credentials to manage products, stock, and orders."
+        />
+        <LoginScreen />
+      </div>
+    );
+  }
+
+  // Logged in → show admin panel
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
-      <SectionHeading
-        eyebrow="Admin Panel"
-        title="Upload & Manage"
-        subtitle="Add products, stock credentials, and open source codes. Only you (Arsh) should access this."
-      />
-
-      {/* Admin mode gate */}
-      {!adminMode && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-8 flex items-center gap-3 rounded-2xl glass p-5 ring-1 ring-gold/30"
-        >
-          <ShieldAlert className="h-6 w-6 shrink-0 text-gold" />
-          <div className="flex-1">
-            <h3 className="font-semibold">Admin mode is OFF</h3>
-            <p className="text-sm text-muted-foreground">
-              Enable admin mode in the navbar to create, edit, and delete listings.
-            </p>
+      {/* Admin header */}
+      <div className="mb-8 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-gold" />
+            <h2 className="text-2xl font-bold">Welcome, {admin.name.split(" ")[0]}</h2>
           </div>
-          <Button onClick={toggleAdmin} className="gap-2 bg-gradient-to-r from-gold to-amber-400 text-black">
-            Enable Admin
-          </Button>
-        </motion.div>
-      )}
-
-      {adminMode && (
-        <Tabs defaultValue="product" className="mt-10">
-          <TabsList className="grid w-full grid-cols-3 glass">
-            <TabsTrigger value="product" className="gap-2"><Package className="h-4 w-4" /> Product</TabsTrigger>
-            <TabsTrigger value="stock" className="gap-2"><Boxes className="h-4 w-4" /> Stock</TabsTrigger>
-            <TabsTrigger value="opensource" className="gap-2"><Code2 className="h-4 w-4" /> Open Source</TabsTrigger>
-          </TabsList>
-
-          {/* PRODUCT FORM */}
-          <TabsContent value="product" className="mt-6 space-y-6">
-            <div className="grid gap-5 rounded-2xl glass p-6 ring-1 ring-border/40 md:grid-cols-2">
-              <div className="space-y-3">
-                <div><Label>Name *</Label><Input value={pName} onChange={(e)=>setPName(e.target.value)} className="glass" placeholder="e.g. Nitro Sniper Bot" /></div>
-                <div><Label>Description *</Label><Textarea value={pDesc} onChange={(e)=>setPDesc(e.target.value)} className="glass" rows={3} placeholder="What does it do?" /></div>
-                <div><Label>Code Link</Label><Input value={pLink} onChange={(e)=>setPLink(e.target.value)} className="glass" placeholder="https://github.com/..." /></div>
-                <div><Label>Folder / Category</Label><Input value={pFolder} onChange={(e)=>setPFolder(e.target.value)} className="glass" placeholder="e.g. Discord Bots" /></div>
-                <div><Label>Tags (comma separated)</Label><Input value={pTags} onChange={(e)=>setPTags(e.target.value)} className="glass" placeholder="discord, bot, sniper" /></div>
-              </div>
-              <div className="space-y-4">
-                <ImageUpload value={pImage} onChange={setPImage} label="Product Image" />
-                <div>
-                  <Label>Type</Label>
-                  <div className="mt-2 flex gap-2">
-                    {(["paid","free"] as const).map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => setPType(t)}
-                        className={cn(
-                          "flex-1 rounded-lg px-4 py-2 text-sm font-semibold capitalize ring-1 transition-colors",
-                          pType === t
-                            ? t === "paid" ? "bg-gold/90 text-black ring-gold" : "bg-emerald-500/90 text-emerald-950 ring-emerald-500"
-                            : "glass ring-border/40 text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {t === "paid" ? "Paid" : "Free"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {pType === "paid" && (
-                  <div><Label>Price (USD)</Label><Input type="number" value={pPrice} onChange={(e)=>setPPrice(e.target.value)} className="glass" placeholder="25.00" /></div>
-                )}
-                <div className="flex items-center justify-between rounded-lg glass px-4 py-3 ring-1 ring-border/40">
-                  <div><div className="text-sm font-medium">Featured</div><div className="text-xs text-muted-foreground">Show on homepage</div></div>
-                  <Switch checked={pFeatured} onCheckedChange={setPFeatured} />
-                </div>
-                <Button onClick={saveProduct} disabled={savingP} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
-                  {savingP ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add Product
-                </Button>
-              </div>
-            </div>
-
-            {/* Existing products */}
-            <div className="rounded-2xl glass p-5 ring-1 ring-border/40">
-              <h4 className="mb-3 font-semibold">Existing Products ({productsData?.products.length ?? 0})</h4>
-              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                {(productsData?.products ?? []).map((p) => (
-                  <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Badge variant={p.type === "paid" ? "default" : "secondary"} className={p.type === "paid" ? "bg-gold/80 text-black" : "bg-emerald-500/80 text-emerald-950"}>{p.type}</Badge>
-                      <span className="truncate font-medium">{p.name}</span>
-                      {p.featured && <Badge variant="outline" className="text-gold">★</Badge>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">{p.price > 0 ? `$${p.price}` : "FREE"}</span>
-                      <button onClick={() => deleteProduct(p.id)} className="text-muted-foreground hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* STOCK FORM */}
-          <TabsContent value="stock" className="mt-6 space-y-6">
-            <div className="grid gap-5 rounded-2xl glass p-6 ring-1 ring-border/40 md:grid-cols-2">
-              <div className="space-y-3">
-                <div><Label>Name *</Label><Input value={sName} onChange={(e)=>setSName(e.target.value)} className="glass" placeholder="e.g. Premium Email (5 pack)" /></div>
-                <div><Label>Description *</Label><Textarea value={sDesc} onChange={(e)=>setSDesc(e.target.value)} className="glass" rows={3} placeholder="What's included?" /></div>
-                <div><Label>Category</Label>
-                  <Input value={sCategory} onChange={(e)=>setSCategory(e.target.value)} className="glass" placeholder="Email / Account / Credential" list="stock-cats" />
-                  <datalist id="stock-cats"><option value="Email" /><option value="Account" /><option value="Credential" /></datalist>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Price (USD)</Label><Input type="number" value={sPrice} onChange={(e)=>setSPrice(e.target.value)} className="glass" placeholder="8.00" /></div>
-                  <div><Label>Quantity</Label><Input type="number" value={sQty} onChange={(e)=>setSQty(e.target.value)} className="glass" placeholder="10" /></div>
-                </div>
-                <div><Label>Tags (comma separated)</Label><Input value={sTags} onChange={(e)=>setSTags(e.target.value)} className="glass" placeholder="email, verified" /></div>
-              </div>
-              <div className="space-y-4">
-                <ImageUpload value={sImage} onChange={setSImage} label="Stock Image" />
-                {/* Credentials */}
-                <div>
-                  <div className="flex items-center justify-between">
-                    <Label>Credentials (revealed after purchase)</Label>
-                    <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => setCreds([...creds, { label: "", value: "" }])}>
-                      <Plus className="h-3 w-3" /> Add
-                    </Button>
-                  </div>
-                  <div className="mt-2 max-h-52 space-y-2 overflow-y-auto pr-1">
-                    {creds.map((c, i) => (
-                      <div key={i} className="flex gap-2">
-                        <Input value={c.label} onChange={(e)=>{const n=[...creds];n[i]={...n[i],label:e.target.value};setCreds(n);}} className="glass text-sm" placeholder="Label (e.g. Email)" />
-                        <Input value={c.value} onChange={(e)=>{const n=[...creds];n[i]={...n[i],value:e.target.value};setCreds(n);}} className="glass text-sm" placeholder="user@x.com : pass" />
-                        {creds.length > 1 && (
-                          <button onClick={() => setCreds(creds.filter((_,x)=>x!==i))} className="text-muted-foreground hover:text-rose-400 px-1"><X className="h-4 w-4" /></button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">These are stored securely and only shown to buyers after payment confirms.</p>
-                </div>
-                <Button onClick={saveStock} disabled={savingS} className="w-full gap-2 bg-gradient-to-r from-gold to-amber-400 text-black">
-                  {savingS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add Stock Item
-                </Button>
-              </div>
-            </div>
-
-            <div className="rounded-2xl glass p-5 ring-1 ring-border/40">
-              <h4 className="mb-3 font-semibold">Existing Stock ({stockData?.items.length ?? 0})</h4>
-              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                {(stockData?.items ?? []).map((s) => (
-                  <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Badge variant="secondary" className="glass">{s.category}</Badge>
-                      <span className="truncate font-medium">{s.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">${s.price} · {s.quantity - s.soldCount} left</span>
-                      <button onClick={() => deleteStock(s.id)} className="text-muted-foreground hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* OPEN SOURCE FORM */}
-          <TabsContent value="opensource" className="mt-6 space-y-6">
-            <div className="grid gap-5 rounded-2xl glass p-6 ring-1 ring-border/40 md:grid-cols-2">
-              <div className="space-y-3">
-                <div><Label>Name *</Label><Input value={oName} onChange={(e)=>setOName(e.target.value)} className="glass" placeholder="e.g. Discord.js Bot Template" /></div>
-                <div><Label>Description *</Label><Textarea value={oDesc} onChange={(e)=>setODesc(e.target.value)} className="glass" rows={3} placeholder="What does it do?" /></div>
-                <div><Label>Code / Repo Link</Label><Input value={oLink} onChange={(e)=>setOLink(e.target.value)} className="glass" placeholder="https://github.com/..." /></div>
-                <div><Label>Category</Label>
-                  <Input value={oCategory} onChange={(e)=>setOCategory(e.target.value)} className="glass" list="os-cats" />
-                  <datalist id="os-cats"><option value="Discord Bot" /><option value="Tool" /><option value="Script" /></datalist>
-                </div>
-                <div><Label>Tags (comma separated)</Label><Input value={oTags} onChange={(e)=>setOTags(e.target.value)} className="glass" placeholder="discord.js, free, template" /></div>
-              </div>
-              <div className="space-y-4">
-                <ImageUpload value={oImage} onChange={setOImage} label="Preview Image" />
-                <div className="rounded-lg bg-emerald-500/10 p-4 ring-1 ring-emerald-glow/20">
-                  <div className="flex items-center gap-2 text-sm font-medium text-emerald-glow">
-                    <CheckCircle2 className="h-4 w-4" /> Always Free
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">Open source codes are free for everyone — no payment required.</p>
-                </div>
-                <Button onClick={saveOS} disabled={savingO} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
-                  {savingO ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add Open Source Code
-                </Button>
-              </div>
-            </div>
-
-            <div className="rounded-2xl glass p-5 ring-1 ring-border/40">
-              <h4 className="mb-3 font-semibold">Existing Open Source ({osData?.items.length ?? 0})</h4>
-              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                {(osData?.items ?? []).map((o) => (
-                  <div key={o.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Badge variant="secondary" className="glass">{o.category}</Badge>
-                      <span className="truncate font-medium">{o.name}</span>
-                    </div>
-                    <button onClick={() => deleteOS(o.id)} className="text-muted-foreground hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </TabsContent>
-        </Tabs>
-      )}
-
-      {/* Orders overview (admin) */}
-      {adminMode && (
-        <div className="mt-8 rounded-2xl glass p-5 ring-1 ring-border/40">
-          <h4 className="mb-3 font-semibold">Recent Orders ({ordersData?.orders.length ?? 0})</h4>
-          <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-            {(ordersData?.orders ?? []).slice(0, 20).map((o) => (
-              <div key={o.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Badge variant={o.status === "paid" ? "default" : "secondary"} className={o.status === "paid" ? "bg-emerald-500/80 text-emerald-950" : "glass"}>{o.status}</Badge>
-                  <span className="truncate font-medium">{o.itemName}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{o.paymentMethod}</span>
-                  <span>${o.amount}</span>
-                </div>
-              </div>
-            ))}
-            {(ordersData?.orders.length ?? 0) === 0 && <p className="text-sm text-muted-foreground">No orders yet.</p>}
-          </div>
+          <p className="mt-1 text-sm text-muted-foreground">{admin.role} · {admin.email}</p>
         </div>
-      )}
+        <Button variant="outline" size="sm" onClick={logout} className="glass gap-2">
+          <LogOut className="h-4 w-4" /> Logout
+        </Button>
+      </div>
+
+      <Tabs defaultValue="product" className="mt-2">
+        <TabsList className="grid w-full grid-cols-3 glass">
+          <TabsTrigger value="product" className="gap-2"><Package className="h-4 w-4" /> Product</TabsTrigger>
+          <TabsTrigger value="stock" className="gap-2"><Boxes className="h-4 w-4" /> Stock</TabsTrigger>
+          <TabsTrigger value="opensource" className="gap-2"><Code2 className="h-4 w-4" /> Open Source</TabsTrigger>
+        </TabsList>
+
+        {/* PRODUCT FORM */}
+        <TabsContent value="product" className="mt-6 space-y-6">
+          <div className="grid gap-5 rounded-2xl glass p-6 ring-1 ring-border/40 md:grid-cols-2">
+            <div className="space-y-3">
+              <div><Label>Name *</Label><Input value={pName} onChange={(e)=>setPName(e.target.value)} className="glass" placeholder="e.g. Nitro Sniper Bot" /></div>
+              <div><Label>Description *</Label><Textarea value={pDesc} onChange={(e)=>setPDesc(e.target.value)} className="glass" rows={3} placeholder="What does it do?" /></div>
+              <div><Label>Code Link</Label><Input value={pLink} onChange={(e)=>setPLink(e.target.value)} className="glass" placeholder="https://github.com/..." /></div>
+              <div><Label>Folder / Category</Label><Input value={pFolder} onChange={(e)=>setPFolder(e.target.value)} className="glass" placeholder="e.g. Discord Bots" /></div>
+              <div><Label>Tags (comma separated)</Label><Input value={pTags} onChange={(e)=>setPTags(e.target.value)} className="glass" placeholder="discord, bot, sniper" /></div>
+            </div>
+            <div className="space-y-4">
+              <ImageUpload value={pImage} onChange={setPImage} label="Product Image" />
+              <div>
+                <Label>Type</Label>
+                <div className="mt-2 flex gap-2">
+                  {(["paid","free"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setPType(t)}
+                      className={cn(
+                        "flex-1 rounded-lg px-4 py-2 text-sm font-semibold capitalize ring-1 transition-colors",
+                        pType === t
+                          ? t === "paid" ? "bg-gold/90 text-black ring-gold" : "bg-emerald-500/90 text-emerald-950 ring-emerald-500"
+                          : "glass ring-border/40 text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {t === "paid" ? "Paid" : "Free"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {pType === "paid" && (
+                <div><Label>Price (USD)</Label><Input type="number" value={pPrice} onChange={(e)=>setPPrice(e.target.value)} className="glass" placeholder="25.00" /></div>
+              )}
+              <div className="flex items-center justify-between rounded-lg glass px-4 py-3 ring-1 ring-border/40">
+                <div><div className="text-sm font-medium">Featured</div><div className="text-xs text-muted-foreground">Show on homepage</div></div>
+                <Switch checked={pFeatured} onCheckedChange={setPFeatured} />
+              </div>
+              <Button onClick={saveProduct} disabled={savingP} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
+                {savingP ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add Product
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl glass p-5 ring-1 ring-border/40">
+            <h4 className="mb-3 font-semibold">Existing Products ({productsData?.products.length ?? 0})</h4>
+            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {(productsData?.products ?? []).map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Badge variant={p.type === "paid" ? "default" : "secondary"} className={p.type === "paid" ? "bg-gold/80 text-black" : "bg-emerald-500/80 text-emerald-950"}>{p.type}</Badge>
+                    <span className="truncate font-medium">{p.name}</span>
+                    {p.featured && <Badge variant="outline" className="text-gold">★</Badge>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{p.price > 0 ? `$${p.price}` : "FREE"}</span>
+                    <button onClick={() => deleteProduct(p.id)} className="text-muted-foreground hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* STOCK FORM */}
+        <TabsContent value="stock" className="mt-6 space-y-6">
+          <div className="grid gap-5 rounded-2xl glass p-6 ring-1 ring-border/40 md:grid-cols-2">
+            <div className="space-y-3">
+              <div><Label>Name *</Label><Input value={sName} onChange={(e)=>setSName(e.target.value)} className="glass" placeholder="e.g. Premium Email (5 pack)" /></div>
+              <div><Label>Description *</Label><Textarea value={sDesc} onChange={(e)=>setSDesc(e.target.value)} className="glass" rows={3} placeholder="What's included?" /></div>
+              <div><Label>Category</Label>
+                <Input value={sCategory} onChange={(e)=>setSCategory(e.target.value)} className="glass" placeholder="Email / Account / Credential" list="stock-cats" />
+                <datalist id="stock-cats"><option value="Email" /><option value="Account" /><option value="Credential" /></datalist>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Price (USD)</Label><Input type="number" value={sPrice} onChange={(e)=>setSPrice(e.target.value)} className="glass" placeholder="8.00" /></div>
+                <div><Label>Quantity</Label><Input type="number" value={sQty} onChange={(e)=>setSQty(e.target.value)} className="glass" placeholder="10" /></div>
+              </div>
+              <div><Label>Tags (comma separated)</Label><Input value={sTags} onChange={(e)=>setSTags(e.target.value)} className="glass" placeholder="email, verified" /></div>
+            </div>
+            <div className="space-y-4">
+              <ImageUpload value={sImage} onChange={setSImage} label="Stock Image" />
+              <div>
+                <div className="flex items-center justify-between">
+                  <Label>Credentials (revealed after purchase)</Label>
+                  <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => setCreds([...creds, { label: "", value: "" }])}>
+                    <Plus className="h-3 w-3" /> Add
+                  </Button>
+                </div>
+                <div className="mt-2 max-h-52 space-y-2 overflow-y-auto pr-1">
+                  {creds.map((c, i) => (
+                    <div key={i} className="flex gap-2">
+                      <Input value={c.label} onChange={(e)=>{const n=[...creds];n[i]={...n[i],label:e.target.value};setCreds(n);}} className="glass text-sm" placeholder="Label (e.g. Email)" />
+                      <Input value={c.value} onChange={(e)=>{const n=[...creds];n[i]={...n[i],value:e.target.value};setCreds(n);}} className="glass text-sm" placeholder="user@x.com : pass" />
+                      {creds.length > 1 && (
+                        <button onClick={() => setCreds(creds.filter((_,x)=>x!==i))} className="text-muted-foreground hover:text-rose-400 px-1"><X className="h-4 w-4" /></button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">These are stored securely and only shown to buyers after payment confirms.</p>
+              </div>
+              <Button onClick={saveStock} disabled={savingS} className="w-full gap-2 bg-gradient-to-r from-gold to-amber-400 text-black">
+                {savingS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add Stock Item
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl glass p-5 ring-1 ring-border/40">
+            <h4 className="mb-3 font-semibold">Existing Stock ({stockData?.items.length ?? 0})</h4>
+            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {(stockData?.items ?? []).map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Badge variant="secondary" className="glass">{s.category}</Badge>
+                    <span className="truncate font-medium">{s.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">${s.price} · {s.quantity - s.soldCount} left</span>
+                    <button onClick={() => deleteStock(s.id)} className="text-muted-foreground hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* OPEN SOURCE FORM */}
+        <TabsContent value="opensource" className="mt-6 space-y-6">
+          <div className="grid gap-5 rounded-2xl glass p-6 ring-1 ring-border/40 md:grid-cols-2">
+            <div className="space-y-3">
+              <div><Label>Name *</Label><Input value={oName} onChange={(e)=>setOName(e.target.value)} className="glass" placeholder="e.g. Discord.js Bot Template" /></div>
+              <div><Label>Description *</Label><Textarea value={oDesc} onChange={(e)=>setODesc(e.target.value)} className="glass" rows={3} placeholder="What does it do?" /></div>
+              <div><Label>Code / Repo Link</Label><Input value={oLink} onChange={(e)=>setOLink(e.target.value)} className="glass" placeholder="https://github.com/..." /></div>
+              <div><Label>Category</Label>
+                <Input value={oCategory} onChange={(e)=>setOCategory(e.target.value)} className="glass" list="os-cats" />
+                <datalist id="os-cats"><option value="Discord Bot" /><option value="Tool" /><option value="Script" /></datalist>
+              </div>
+              <div><Label>Tags (comma separated)</Label><Input value={oTags} onChange={(e)=>setOTags(e.target.value)} className="glass" placeholder="discord.js, free, template" /></div>
+            </div>
+            <div className="space-y-4">
+              <ImageUpload value={oImage} onChange={setOImage} label="Preview Image" />
+              <div className="rounded-lg bg-emerald-500/10 p-4 ring-1 ring-emerald-glow/20">
+                <div className="flex items-center gap-2 text-sm font-medium text-emerald-glow">
+                  <CheckCircle2 className="h-4 w-4" /> Always Free
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">Open source codes are free for everyone — no payment required.</p>
+              </div>
+              <Button onClick={saveOS} disabled={savingO} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
+                {savingO ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add Open Source Code
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl glass p-5 ring-1 ring-border/40">
+            <h4 className="mb-3 font-semibold">Existing Open Source ({osData?.items.length ?? 0})</h4>
+            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {(osData?.items ?? []).map((o) => (
+                <div key={o.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Badge variant="secondary" className="glass">{o.category}</Badge>
+                    <span className="truncate font-medium">{o.name}</span>
+                  </div>
+                  <button onClick={() => deleteOS(o.id)} className="text-muted-foreground hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Orders overview */}
+      <div className="mt-8 rounded-2xl glass p-5 ring-1 ring-border/40">
+        <h4 className="mb-3 font-semibold">Recent Orders ({ordersData?.orders.length ?? 0})</h4>
+        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+          {(ordersData?.orders ?? []).slice(0, 20).map((o) => (
+            <div key={o.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
+              <div className="flex items-center gap-2 min-w-0">
+                <Badge variant={o.status === "paid" ? "default" : "secondary"} className={o.status === "paid" ? "bg-emerald-500/80 text-emerald-950" : "glass"}>{o.status}</Badge>
+                <span className="truncate font-medium">{o.itemName}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{o.paymentMethod}</span>
+                <span>${o.amount}</span>
+              </div>
+            </div>
+          ))}
+          {(ordersData?.orders.length ?? 0) === 0 && <p className="text-sm text-muted-foreground">No orders yet.</p>}
+        </div>
+      </div>
     </div>
   );
 }

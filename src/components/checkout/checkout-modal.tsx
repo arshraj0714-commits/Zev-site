@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  X, Copy, Check, Wallet, Loader2, ShieldCheck, ExternalLink,
-  CheckCircle2, AlertCircle, Sparkles, ArrowRight, Coins, Mail, Hash,
+  Copy, Check, Wallet, Loader2, ShieldCheck,
+  CheckCircle2, Sparkles, ArrowRight, Coins, Mail, ExternalLink,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -19,15 +19,7 @@ import { ItemImage } from "@/components/site/item-image";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-type Step = "method" | "pay" | "verify" | "success";
-
-interface VerifyResponse {
-  verified: boolean;
-  alreadyPaid?: boolean;
-  order?: any;
-  result?: any;
-  message?: string;
-}
+type Step = "method" | "pay" | "success";
 
 export function CheckoutModal() {
   const { checkoutOpen, checkoutTarget, closeCheckout } = useZev();
@@ -37,13 +29,11 @@ export function CheckoutModal() {
   const [method, setMethod] = useState<string>("LTC");
   const [email, setEmail] = useState("");
   const [discord, setDiscord] = useState("");
-  const [txHash, setTxHash] = useState("");
   const [orderId, setOrderId] = useState<string | null>(null);
   const [cryptoAmount, setCryptoAmount] = useState(0);
   const [address, setAddress] = useState("");
   const [creating, setCreating] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [verifyMsg, setVerifyMsg] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [delivered, setDelivered] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -57,27 +47,24 @@ export function CheckoutModal() {
     if (checkoutOpen) {
       setStep("method");
       setMethod("LTC");
-      setTxHash("");
       setOrderId(null);
       setDelivered(null);
-      setVerifyMsg(null);
     }
   }, [checkoutOpen, checkoutTarget]);
 
-  // For free items, jump straight to creation
+  // For free items, create order immediately and deliver
   async function handleContinue() {
     if (!target) return;
     if (isFree) {
       await createOrder("LTC"); // method irrelevant for free
       return;
     }
-    setStep("pay");
+    await createOrder(method);
   }
 
   async function createOrder(m: string) {
     if (!target) return;
     setCreating(true);
-    setVerifyMsg(null);
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -100,7 +87,7 @@ export function CheckoutModal() {
         setDelivered(data.order.deliveredContent);
         setStep("success");
       } else {
-        setStep("verify");
+        setStep("pay");
       }
     } catch (e) {
       toast.error((e as Error).message);
@@ -109,32 +96,23 @@ export function CheckoutModal() {
     }
   }
 
-  async function verifyPayment() {
-    if (!orderId || !txHash.trim()) {
-      toast.error("Enter your transaction hash");
-      return;
-    }
-    setVerifying(true);
-    setVerifyMsg(null);
+  // Buyer confirms they sent payment — simple, no tx hash
+  async function confirmPayment() {
+    if (!orderId) return;
+    setConfirming(true);
     try {
-      const res = await fetch("/api/verify-payment", {
+      const res = await fetch(`/api/orders/${orderId}/confirm`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, txHash: txHash.trim() }),
       });
-      const data: VerifyResponse = await res.json();
-      if (data.verified) {
-        setDelivered(data.order?.deliveredContent ?? "Payment verified! Check your email/Discord for delivery.");
-        setStep("success");
-        toast.success("Payment verified! 🎉");
-      } else {
-        setVerifyMsg(data.message || "Payment not verified yet.");
-        toast.error("Payment not verified yet — see details below.");
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to confirm");
+      setDelivered(data.delivered || "Payment confirmed! Your purchase has been delivered.");
+      setStep("success");
+      toast.success("Payment confirmed! 🎉");
     } catch (e) {
-      setVerifyMsg(`Verification error: ${(e as Error).message}`);
+      toast.error((e as Error).message);
     } finally {
-      setVerifying(false);
+      setConfirming(false);
     }
   }
 
@@ -158,7 +136,7 @@ export function CheckoutModal() {
                 {isFree ? "Get Free Item" : "Secure Checkout"}
               </DialogTitle>
               <DialogDescription className="mt-1">
-                {isFree ? "No payment needed — instant delivery." : "On-chain crypto payment verification"}
+                {isFree ? "No payment needed — instant delivery." : "Pay with crypto, get instant delivery"}
               </DialogDescription>
             </div>
           </div>
@@ -245,27 +223,8 @@ export function CheckoutModal() {
                 </motion.div>
               )}
 
-              {/* STEP: pay (for paid) */}
+              {/* STEP: pay — show address + amount + "I've Paid" button (no tx hash) */}
               {step === "pay" && selectedMethod && (
-                <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
-                  <div className="rounded-xl bg-gradient-to-br from-accent/30 to-transparent p-4 ring-1 ring-gold/20">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Pay with</span>
-                      <span className="font-bold" style={{ color: selectedMethod.color }}>{selectedMethod.name}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">{selectedMethod.chain}</div>
-                  </div>
-                  <Button onClick={() => createOrder(method)} disabled={creating} className="w-full gap-2 bg-gradient-to-r from-gold to-amber-400 text-black">
-                    {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />} Generate Payment Address
-                  </Button>
-                  <button onClick={() => setStep("method")} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
-                    ← Change method
-                  </button>
-                </motion.div>
-              )}
-
-              {/* STEP: verify */}
-              {step === "verify" && selectedMethod && (
                 <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
                   {/* Address */}
                   <div className="rounded-xl glass p-4 ring-1 ring-emerald-glow/30">
@@ -285,7 +244,7 @@ export function CheckoutModal() {
                   {/* Amount */}
                   <div className="rounded-xl bg-gold/10 p-4 ring-1 ring-gold/30">
                     <Label className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
-                      <Coins className="h-3.5 w-3.5" /> Exact Amount
+                      <Coins className="h-3.5 w-3.5" /> Amount to Send
                     </Label>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-2xl font-bold text-gold">
@@ -300,40 +259,22 @@ export function CheckoutModal() {
                   </div>
 
                   <a href={selectedMethod.explorer} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1 text-xs text-emerald-glow hover:underline">
-                    Verify on {selectedMethod.explorer.replace("https://","")} <ExternalLink className="h-3 w-3" />
+                    Check explorer: {selectedMethod.explorer.replace("https://","")} <ExternalLink className="h-3 w-3" />
                   </a>
 
-                  {/* QR-like note */}
+                  {/* Instructions */}
                   <div className="rounded-xl bg-accent/15 p-3 text-xs text-muted-foreground ring-1 ring-border/40">
-                    <p className="font-medium text-foreground">⚠ Important</p>
-                    <p className="mt-1">Send the <span className="text-gold font-semibold">exact amount</span> from any wallet. After sending, paste your transaction hash below. We verify it on-chain — no manual confirmation needed.</p>
+                    <p className="font-medium text-foreground">How to pay</p>
+                    <p className="mt-1">1. Copy the <span className="text-emerald-glow font-semibold">address</span> and <span className="text-gold font-semibold">amount</span> above.<br/>2. Send the exact amount from your crypto wallet.<br/>3. Once sent, click <span className="text-foreground font-semibold">&quot;I&apos;ve Paid — Confirm&quot;</span> below to get instant access.</p>
                   </div>
 
-                  {/* Tx hash input */}
-                  <div>
-                    <Label className="flex items-center gap-1.5"><Hash className="h-3.5 w-3.5" /> Transaction Hash</Label>
-                    <Input
-                      value={txHash}
-                      onChange={(e)=>setTxHash(e.target.value)}
-                      className="glass font-mono text-sm"
-                      placeholder="Paste your tx hash / signature..."
-                    />
-                  </div>
-
-                  {verifyMsg && (
-                    <div className="flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 ring-1 ring-amber-500/30">
-                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-                      <p className="text-xs text-amber-200">{verifyMsg}</p>
-                    </div>
-                  )}
-
-                  <Button onClick={verifyPayment} disabled={verifying || !txHash.trim()} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
-                    {verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                    {verifying ? "Verifying on-chain..." : "Verify Payment"}
+                  <Button onClick={confirmPayment} disabled={confirming} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
+                    {confirming ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                    {confirming ? "Confirming..." : "I've Paid — Confirm"}
                   </Button>
-                  <p className="text-center text-xs text-muted-foreground">
-                    Verification checks the blockchain for your exact amount to Arsh&apos;s address.
-                  </p>
+                  <button onClick={() => setStep("method")} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
+                    ← Change method
+                  </button>
                 </motion.div>
               )}
 
@@ -349,7 +290,7 @@ export function CheckoutModal() {
                     >
                       <CheckCircle2 className="h-9 w-9 text-emerald-glow" />
                     </motion.div>
-                    <h3 className="mt-3 text-xl font-bold text-gradient-emerald">Payment Verified!</h3>
+                    <h3 className="mt-3 text-xl font-bold text-gradient-emerald">{isFree ? "Delivered!" : "Payment Confirmed!"}</h3>
                     <p className="text-sm text-muted-foreground">Your purchase has been delivered.</p>
                   </div>
 

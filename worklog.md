@@ -70,3 +70,28 @@ Stage Summary:
   * Arsh's wallet addresses integrated.
   * About page with all of Arsh's info (name, Discord, support server, org, 1000+ vouches, 1573 sold).
   * Professional 3D glassmorphism design, soothing emerald+gold theme, sticky footer, all rights reserved.
+
+---
+Task ID: 16
+Agent: Main Orchestrator
+Task: Fix hydration error, remove tx hash complexity, add admin login (Arsh), fix explorer error.
+
+Work Log:
+- Hydration fix: added suppressHydrationWarning to <body> in layout.tsx (browser extensions like Grammarly inject data-gr-ext-installed / data-new-gr-c-s-check-loaded attrs). Verified: 0 hydration errors after reload.
+- Admin auth: added ADMIN_CREDENTIALS to config.ts (arsh.raj.0713@gmail.com / @rsh0712). Created src/lib/auth.ts (token sign/verify with 7-day TTL). Created /api/auth/login, /api/auth/logout, /api/auth/me endpoints.
+- Store: replaced simple adminMode toggle with full auth state (admin user, authToken, authLoading, setAuth, logout, hydrateAuth). Token persisted in localStorage, verified against /api/auth/me on mount.
+- Checkout simplified: removed tx hash input, verifyPayment(), verifying/verifyMsg/txHash state. Replaced verify step with "I've Paid — Confirm" button calling POST /api/orders/[id]/confirm. Flow: method → pay (address+amount+I've Paid) → success. No explorer verification errors possible in buyer flow now.
+- Created /api/orders/[id]/confirm endpoint: marks order paid + delivers content (product code link or stock credentials) + increments stats.
+- Upload view: replaced admin toggle with LoginScreen (email+password form). Shows admin panel only when logged in. Added logout button. Welcome header with Arsh's name + role.
+- Navbar: Admin button now shows "Admin Login" when logged out, or Arsh's first name + logout icon when logged in. Mobile nav updated too.
+- Agent Browser verification:
+  * Hydration: 0 errors after reload (was showing body attr mismatch before).
+  * Login: wrong creds rejected ("Invalid credentials"), correct creds (arsh.raj.0713@gmail.com / @rsh0712) → "Welcome, Arsh" + admin panel with 3 tabs + orders.
+  * Auth persists across reload (localStorage token verified by /api/auth/me).
+  * Logout works → back to login screen.
+  * Checkout: Zephyr Nitro Sniper → Continue to Payment → address + amount shown → NO tx hash field → "I've Paid — Confirm" → "Payment Confirmed!" + code link delivered. Explorer error gone.
+  * 0 console errors throughout.
+- ESLint: clean.
+
+Stage Summary:
+- All 4 issues fixed: hydration error gone, tx hash removed (simple "I've Paid" flow), admin login with arsh.raj.0713@gmail.com / @rsh0712 working, explorer error eliminated. Fully verified in browser.

@@ -18,6 +18,15 @@ export const SITE_CONFIG = {
   },
 };
 
+// Head admin / owner credentials
+// Owner: Arsh Raj Sharma (arsh.raj.0713@gmail.com)
+export const ADMIN_CREDENTIALS = {
+  email: "arsh.raj.0713@gmail.com",
+  password: "@rsh0712",
+  name: "Arsh Raj Sharma",
+  role: "Head Admin & Owner",
+} as const;
+
 // Crypto wallet addresses owned by Arsh
 export const WALLET_ADDRESSES = {
   LTC: "LhdpCbbxsqLtF7jssTGLWLYBKsnSgjTk3x",
