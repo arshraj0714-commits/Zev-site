@@ -2,38 +2,32 @@
 
 import { motion } from "framer-motion";
 
-export function ZevLogo({ className = "h-9 w-9" }: { className?: string }) {
+export function ZevLogo({ className = "h-9 w-9", animated = true }: { className?: string; animated?: boolean }) {
   return (
-    <svg viewBox="0 0 64 64" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="zev-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-          <stop stopColor="oklch(0.82 0.17 158)" />
-          <stop offset="0.5" stopColor="oklch(0.85 0.14 88)" />
-          <stop offset="1" stopColor="oklch(0.7 0.16 145)" />
-        </linearGradient>
-        <filter id="zev-glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="2" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
-      <path
-        d="M32 3 L55 16.5 L55 47.5 L32 61 L9 47.5 L9 16.5 Z"
-        stroke="url(#zev-grad)"
-        strokeWidth="2"
-        fill="oklch(0.15 0.015 165 / 0.6)"
+    <div className={`relative ${className}`}>
+      {/* Glow behind logo */}
+      <div
+        className="absolute inset-0 rounded-full blur-xl opacity-60"
+        style={{ background: "radial-gradient(circle, oklch(0.75 0.19 158 / 0.5), transparent 70%)" }}
       />
-      <path
-        d="M22 22 L42 22 L24 42 L44 42"
-        stroke="url(#zev-grad)"
-        strokeWidth="4.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        filter="url(#zev-glow)"
+      <img
+        src="/img/zev-logo-3d.png"
+        alt="Zev Logo"
+        className={`relative h-full w-full object-contain drop-shadow-[0_4px_12px_oklch(0.75_0.19_158_/_0.4)] ${animated ? "animate-float-3d" : ""}`}
       />
-    </svg>
+    </div>
+  );
+}
+
+export function ZevLogoFlat({ className = "h-9 w-9" }: { className?: string }) {
+  return (
+    <div className={`relative ${className}`}>
+      <img
+        src="/img/zev-logo-3d.png"
+        alt="Zev Logo"
+        className="relative h-full w-full object-contain drop-shadow-[0_2px_8px_oklch(0.75_0.19_158_/_0.3)]"
+      />
+    </div>
   );
 }
 
@@ -41,14 +35,15 @@ export function ZevWordmark({ className = "" }: { className?: string }) {
   return (
     <div className={`flex items-center gap-2.5 ${className}`}>
       <motion.div
-        initial={{ rotate: -10, scale: 0.8 }}
-        animate={{ rotate: 0, scale: 1 }}
+        initial={{ rotate: -10, scale: 0.8, opacity: 0 }}
+        animate={{ rotate: 0, scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 200, damping: 15 }}
+        className="scene-3d"
       >
-        <ZevLogo className="h-9 w-9" />
+        <ZevLogo className="h-10 w-10" />
       </motion.div>
       <div className="flex flex-col leading-none">
-        <span className="text-xl font-bold tracking-tight text-gradient-mixed">Zev</span>
+        <span className="text-xl font-bold tracking-tight text-aurora">Zev</span>
         <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">by Arsh</span>
       </div>
     </div>
