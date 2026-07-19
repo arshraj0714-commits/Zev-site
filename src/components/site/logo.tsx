@@ -47,7 +47,6 @@ export function ZevWordmark({ className = "" }: { className?: string }) {
       </motion.div>
       <div className="flex flex-col leading-none">
         <span className="text-xl font-bold tracking-tight text-aurora">Zev</span>
-        <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">by Arsh</span>
       </div>
     </div>
   );
