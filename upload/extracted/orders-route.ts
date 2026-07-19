@@ -2,104 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { usdToCrypto, type CryptoMethod } from "@/lib/config";
 import { sendPurchaseEmail, isEmailConfigured } from "@/lib/email";
-import { getTokenFromRequest, verifyToken } from "@/lib/auth";
 
-// Generate a unique human-readable order number: ZEV-XXXXXX
-function generateOrderNumber(): string {
-  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no confusing chars (I,O,0,1)
-  let code = "";
-  for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return `ZEV-${code}`;
-}
-
-async function uniqueOrderNumber(): Promise<string> {
-  let num = generateOrderNumber();
-  let tries = 0;
-  while (tries < 10) {
-    const existing = await db.order.findUnique({ where: { orderNumber: num } });
-    if (!existing) return num;
-    num = generateOrderNumber();
-    tries++;
-  }
-  return `ZEV-${Date.now().toString(36).toUpperCase()}`;
-}
-
-// GET /api/orders
-// - Admin (valid token): returns ALL orders
-// - Logged-in user: returns only orders matching their email
-// - Query param ?email=xxx for explicit filtering
-// - Query param ?search=xxx for searching by orderNumber/itemName/email
-export async function GET(req: NextRequest) {
+// GET /api/orders  (list recent, for admin panel)
+export async function GET() {
   try {
-    const { searchParams } = new URL(req.url);
-    const emailParam = searchParams.get("email")?.trim().toLowerCase();
-    const search = searchParams.get("search")?.trim().toLowerCase();
-
-    // Check if admin via token
-    const token = getTokenFromRequest(req);
-    const user = verifyToken(token);
-    const isAdmin = user?.role === "admin";
-
-    // Determine the email filter
-    let emailFilter: string | undefined;
-    if (isAdmin) {
-      // Admin can see all, or filter by email param if provided
-      emailFilter = emailParam || undefined;
-    } else if (user) {
-      // Regular user: only their own orders
-      emailFilter = user.email.toLowerCase();
-    } else if (emailParam) {
-      // Not logged in but provided email (for checkout history lookup)
-      emailFilter = emailParam;
-    } else {
-      // Not logged in, no email → return empty
-      return NextResponse.json({ orders: [] });
-    }
-
-    // Build where clause
-    const where: any = {};
-    if (emailFilter) {
-      where.buyerEmail = { equals: emailFilter, mode: "insensitive" };
-    }
-    if (search) {
-      where.OR = [
-        { orderNumber: { contains: search, mode: "insensitive" } },
-        { itemName: { contains: search, mode: "insensitive" } },
-        { buyerEmail: { contains: search, mode: "insensitive" } },
-        { txHash: { contains: search, mode: "insensitive" } },
-      ];
-    }
-
     const orders = await db.order.findMany({
-      where,
       orderBy: { createdAt: "desc" },
-      take: isAdmin ? 200 : 100,
-      select: {
-        id: true,
-        orderNumber: true,
-        itemType: true,
-        itemName: true,
-        amount: true,
-        paymentMethod: true,
-        cryptoAmount: true,
-        txHash: true,
-        buyerEmail: true,
-        buyerDiscord: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      take: 100,
     });
-
-    return NextResponse.json({ orders, isAdmin });
+    return NextResponse.json({ orders });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
 }
 
-// POST /api/orders — create a pending order
+// POST /api/orders  — create a pending order
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -124,6 +41,7 @@ export async function POST(req: NextRequest) {
       const p = await db.product.findUnique({ where: { id: itemId } });
       if (!p) return NextResponse.json({ error: "Product not found" }, { status: 404 });
       if (p.type === "free") {
+        // free product — deliver immediately
         deliveredContent = p.codeLink
           ? `FREE PRODUCT — Code Link: ${p.codeLink}`
           : "FREE PRODUCT — No code link provided.";
@@ -147,11 +65,9 @@ export async function POST(req: NextRequest) {
     }
 
     const cryptoAmount = usdAmount > 0 ? await usdToCrypto(usdAmount, paymentMethod) : 0;
-    const orderNumber = await uniqueOrderNumber();
 
     const order = await db.order.create({
       data: {
-        orderNumber,
         itemType,
         productId: itemType === "product" ? itemId : null,
         stockId: itemType === "stock" ? itemId : null,
@@ -177,6 +93,7 @@ export async function POST(req: NextRequest) {
       if (itemType === "product") {
         await db.product.update({ where: { id: itemId }, data: { salesCount: { increment: 1 } } });
       }
+      // Send delivery email for free products
       if (buyerEmail && deliveredContent) {
         const emailResult = await sendPurchaseEmail(buyerEmail, itemName, deliveredContent);
         emailSent = emailResult.sent;

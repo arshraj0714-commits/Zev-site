@@ -119,15 +119,6 @@ export function usePrices() {
 export function useOrders() {
   return useQuery({
     queryKey: ["orders"],
-    queryFn: () => fetchJson<{ orders: any[]; isAdmin?: boolean }>(`/api/orders`),
-  });
-}
-
-export function useMyOrders(search?: string) {
-  const params = new URLSearchParams();
-  if (search) params.set("search", search);
-  return useQuery({
-    queryKey: ["my-orders", search || ""],
-    queryFn: () => fetchJson<{ orders: any[]; isAdmin?: boolean }>(`/api/orders${params.toString() ? `?${params}` : ""}`),
+    queryFn: () => fetchJson<{ orders: any[] }>(`/api/orders`),
   });
 }

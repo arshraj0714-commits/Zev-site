@@ -67,7 +67,6 @@ model OpenSource {
 // Orders / purchases
 model Order {
   id            String   @id @default(cuid())
-  orderNumber   String   @unique // human-readable, e.g. "ZEV-A4F2K9"
   itemType      String // "product" | "stock"
   productId     String?
   stockId       String?
@@ -84,9 +83,6 @@ model Order {
   deliveredContent String? // revealed content snapshot
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-
-  @@index([buyerEmail])
-  @@index([status])
 }
 
 // Site-wide stats (singleton row)

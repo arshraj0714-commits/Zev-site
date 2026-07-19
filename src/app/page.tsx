@@ -15,6 +15,7 @@ import { StockView } from "@/components/views/stock-view";
 import { UploadView } from "@/components/views/upload-view";
 import { AboutView } from "@/components/views/about-view";
 import { AuthView } from "@/components/views/auth-view";
+import { OrdersView } from "@/components/views/orders-view";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +34,7 @@ function ViewRouter() {
     upload: <UploadView />,
     about: <AboutView />,
     auth: <AuthView />,
+    orders: <OrdersView />,
   };
 
   return (

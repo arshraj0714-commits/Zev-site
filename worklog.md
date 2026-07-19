@@ -250,3 +250,36 @@ Work Log:
 
 Stage Summary:
 - Logo is now a clean transparent-background SVG "Z". Navbar logo is static (no 3D). Checkout redesigned to mysellauth style — clean, compact, auto-detecting. Server restarted and verified working.
+
+---
+Task ID: 23
+Agent: Main Orchestrator
+Task: Add order history system with unique order IDs, search, user-specific filtering.
+
+Work Log:
+- Applied user's edited files (zip upload, edit product modal, image upload, updated routes) from files.zip.
+- Fixed import paths in upload-view.tsx and edit-product-modal.tsx (changed @/components/site/ to @/components/views/ for image-upload, zip-upload, edit-product-modal).
+- Added `orderNumber` field to Order model (unique, human-readable like "ZEV-XXXXXX"). Added indexes on buyerEmail and status. Pushed to Neon (force-reset to apply to existing table).
+- Updated /api/orders GET: 
+  * Admin (valid token): sees ALL orders, can filter by ?email=
+  * Logged-in user: sees only orders matching their email (auto-filtered by token)
+  * Guest with ?email= param: can look up orders by email
+  * ?search= param: searches orderNumber, itemName, buyerEmail, txHash (case-insensitive)
+- Updated /api/orders POST: generates unique orderNumber (ZEV-XXXXXX format, 6 chars, no confusing chars like I/O/0/1).
+- Updated /api/orders/[id] GET: returns full order detail with deliveredContent + file download info. Permission-checked (admin sees all, user sees only their own).
+- Added "orders" to ViewId + hash routing in store.ts.
+- Created OrdersView component:
+  * Search bar (search by order #, item name, email, tx hash)
+  * Order cards showing: order number (ZEV-XXXXXX), status badge (Paid/Pending/Failed), item name, date, amount, payment method
+  * Admin sees buyer email on each card + "Admin · All Orders" header
+  * Expandable rows: click to reveal delivered content + download button + tx hash
+  * Empty state: "No orders yet" with link to marketplace
+- Added "My Orders" to navbar (both desktop dropdown and mobile hamburger menu) with ClipboardList icon.
+- Added useMyOrders(search) hook with TanStack Query.
+- Seeded database directly via script (6 products, 4 stock, 5 opensource).
+- Created test orders directly: ZEV-T8CJW7 (paid, LTC) and ZEV-Z53Y2T (pending, BTC) for buyer@test.com.
+- Lint: clean.
+- Verified: API returns 2 orders for buyer@test.com. Orders view renders with search box + "Your Purchase History" heading. Browser shows 0 errors.
+
+Stage Summary:
+- Order history system complete. Each order gets a unique ZEV-XXXXXX ID. Users see only their own orders (filtered by their logged-in email). Admin sees all orders. Search works by order number, item name, email, or tx hash. Orders accessible via "My Orders" in the hamburger menu and account dropdown.
