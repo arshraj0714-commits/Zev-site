@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { usdToCrypto, type CryptoMethod } from "@/lib/config";
+import { sendPurchaseEmail, isEmailConfigured } from "@/lib/email";
 
 // GET /api/orders  (list recent, for admin panel)
 export async function GET() {
@@ -79,7 +80,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // If free, increment stats & sales immediately
+    // If free, increment stats & sales immediately + send email
+    let emailSent = false;
     if (usdAmount === 0) {
       await db.siteStats.upsert({
         where: { id: "singleton" },
@@ -89,9 +91,14 @@ export async function POST(req: NextRequest) {
       if (itemType === "product") {
         await db.product.update({ where: { id: itemId }, data: { salesCount: { increment: 1 } } });
       }
+      // Send delivery email for free products
+      if (buyerEmail && deliveredContent) {
+        const emailResult = await sendPurchaseEmail(buyerEmail, itemName, deliveredContent);
+        emailSent = emailResult.sent;
+      }
     }
 
-    return NextResponse.json({ order }, { status: 201 });
+    return NextResponse.json({ order, emailSent, emailConfigured: isEmailConfigured() }, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

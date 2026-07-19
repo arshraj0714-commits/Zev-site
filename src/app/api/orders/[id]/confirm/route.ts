@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { scanWalletForPayment } from "@/lib/payments";
+import { sendPurchaseEmail, isEmailConfigured } from "@/lib/email";
 
 // POST /api/orders/[id]/confirm
 // Buyer clicks "I've Paid - Confirm". The server scans Arsh's wallet on the
@@ -91,12 +92,24 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       create: { id: "singleton", productsSold: 1, vouches: 1000 },
     });
 
+    // Send purchase confirmation email to the buyer
+    let emailSent = false;
+    let emailError: string | undefined;
+    if (order.buyerEmail) {
+      const emailResult = await sendPurchaseEmail(order.buyerEmail, order.itemName, deliveredContent || "");
+      emailSent = emailResult.sent;
+      emailError = emailResult.error;
+    }
+
     return NextResponse.json({
       order: updated,
       delivered: deliveredContent,
       verified: true,
       txHash: scan.txHash,
-      message: "Payment verified on the blockchain! Your purchase has been delivered.",
+      emailSent,
+      emailConfigured: isEmailConfigured(),
+      message: "Payment verified on the blockchain! Your purchase has been delivered." +
+        (emailSent ? " A copy has been sent to your email." : ""),
     });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

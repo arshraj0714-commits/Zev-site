@@ -146,3 +146,23 @@ VERIFICATION (curl + browser):
 
 Stage Summary:
 - Security hole CLOSED. Nobody can get paid tools without paying. The server scans Arsh's real wallet (LhdpCbbxsqLtF7jssTGLWLYBKsnSgjTk3x for LTC, etc.) on the blockchain for a transaction matching the exact amount. Only a real on-chain payment triggers delivery. Free products still deliver instantly.
+
+---
+Task ID: 19
+Agent: Main Orchestrator
+Task: Fix website not loading + add email delivery for purchases.
+
+Work Log:
+- Website not loading: dev server kept dying between bash sessions (sandbox kills background processes). Restarted with setsid for persistence. Verified: home loads 200, 0 errors.
+- Installed nodemailer + @types/nodemailer for email sending.
+- Created src/lib/email.ts: SMTP transport (configurable via env), sendPurchaseEmail() with branded HTML email template (Zev emerald/gold theme, code link/credentials in monospace box, Discord support link, "© Zev by Arsh Raj Sharma. All rights reserved." footer).
+- Updated /api/orders/[id]/confirm: after successful on-chain verification + delivery, sends purchase email to buyer's email. Returns emailSent + emailConfigured flags.
+- Updated /api/orders (free products): after auto-delivery, sends purchase email. Returns emailSent + emailConfigured flags.
+- Updated checkout modal: added emailSent state, shows "A copy of your purchase has been sent to your email" notification (green box with Mail icon) on success step when email was sent.
+- Updated .env with Gmail SMTP config (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, SMTP_FROM_NAME). Arsh needs to replace SMTP_PASS with his Gmail App Password from https://myaccount.google.com/apppasswords
+- Graceful fallback: if SMTP not configured or fails, delivery still happens on-screen — no email sent but order completes.
+- Lint: clean.
+- Browser verified: home loads, marketplace loads, free product checkout delivers content + shows "Delivered!" success screen, 0 errors.
+
+Stage Summary:
+- Website loading fixed (server restarted). Email delivery system added — purchases are emailed to buyers automatically once Arsh adds his Gmail App Password to .env. Works for both free (instant) and paid (after on-chain verification) products.

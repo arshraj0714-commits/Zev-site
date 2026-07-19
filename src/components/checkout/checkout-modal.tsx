@@ -38,6 +38,7 @@ export function CheckoutModal() {
   const [verifyMsg, setVerifyMsg] = useState<string | null>(null);
   const [verifyTries, setVerifyTries] = useState(0);
   const [copied, setCopied] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
 
   const target = checkoutTarget;
   const isFree = target?.price === 0;
@@ -51,6 +52,9 @@ export function CheckoutModal() {
       setMethod("LTC");
       setOrderId(null);
       setDelivered(null);
+      setVerifyMsg(null);
+      setVerifyTries(0);
+      setEmailSent(false);
     }
   }, [checkoutOpen, checkoutTarget]);
 
@@ -87,6 +91,7 @@ export function CheckoutModal() {
       setAddress(methodInfo?.address ?? "");
       if (data.order.status === "paid" && data.order.deliveredContent) {
         setDelivered(data.order.deliveredContent);
+        setEmailSent(!!data.emailSent);
         setStep("success");
       } else {
         setStep("pay");
@@ -111,6 +116,7 @@ export function CheckoutModal() {
       if (!res.ok) throw new Error(data.error || "Failed to verify");
       if (data.verified) {
         setDelivered(data.delivered || "Payment verified on-chain! Your purchase has been delivered.");
+        setEmailSent(!!data.emailSent);
         setStep("success");
         toast.success("Payment verified on the blockchain! 🎉");
       } else {
@@ -336,6 +342,13 @@ export function CheckoutModal() {
                       <Button size="sm" variant="outline" className="mt-2 glass gap-1" onClick={() => copy(delivered, "Content")}>
                         {copied === "Content" ? <Check className="h-3.5 w-3.5 text-emerald-glow" /> : <Copy className="h-3.5 w-3.5" />} Copy content
                       </Button>
+                    </div>
+                  )}
+
+                  {emailSent && (
+                    <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 p-3 ring-1 ring-emerald-glow/20">
+                      <Mail className="h-4 w-4 shrink-0 text-emerald-glow" />
+                      <p className="text-xs text-emerald-200">A copy of your purchase has been sent to your email.</p>
                     </div>
                   )}
 
