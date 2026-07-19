@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
-  Copy, Check, Wallet, Loader2, ShieldCheck, AlertCircle, RefreshCw,
-  CheckCircle2, Sparkles, ArrowRight, Coins, Mail, ExternalLink,
+  Copy, Check, Wallet, Loader2, ShieldCheck, AlertCircle,
+  CheckCircle2, Sparkles, ArrowRight, Coins, Mail, ExternalLink, Radio,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -33,18 +33,31 @@ export function CheckoutModal() {
   const [cryptoAmount, setCryptoAmount] = useState(0);
   const [address, setAddress] = useState("");
   const [creating, setCreating] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const [delivered, setDelivered] = useState<string | null>(null);
   const [verifyMsg, setVerifyMsg] = useState<string | null>(null);
-  const [verifyTries, setVerifyTries] = useState(0);
   const [copied, setCopied] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
+
+  // Auto-polling state
+  const [polling, setPolling] = useState(false);
+  const [pollCount, setPollCount] = useState(0);
+  const [foundTx, setFoundTx] = useState(false);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const target = checkoutTarget;
   const isFree = target?.price === 0;
 
   const methods = pricesData?.methods ?? [];
   const prices = pricesData?.prices ?? {};
+
+  // Cleanup polling on unmount / modal close
+  const stopPolling = useCallback(() => {
+    if (pollTimer.current) {
+      clearTimeout(pollTimer.current);
+      pollTimer.current = null;
+    }
+    setPolling(false);
+  }, []);
 
   useEffect(() => {
     if (checkoutOpen) {
@@ -53,16 +66,20 @@ export function CheckoutModal() {
       setOrderId(null);
       setDelivered(null);
       setVerifyMsg(null);
-      setVerifyTries(0);
+      setPollCount(0);
+      setFoundTx(false);
       setEmailSent(false);
+    } else {
+      stopPolling();
     }
-  }, [checkoutOpen, checkoutTarget]);
+  }, [checkoutOpen, checkoutTarget, stopPolling]);
 
-  // For free items, create order immediately and deliver
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
   async function handleContinue() {
     if (!target) return;
     if (isFree) {
-      await createOrder("LTC"); // method irrelevant for free
+      await createOrder("LTC");
       return;
     }
     await createOrder(method);
@@ -71,6 +88,7 @@ export function CheckoutModal() {
   async function createOrder(m: string) {
     if (!target) return;
     setCreating(true);
+    setVerifyMsg(null);
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -95,6 +113,9 @@ export function CheckoutModal() {
         setStep("success");
       } else {
         setStep("pay");
+        setVerifyMsg("Waiting for your payment... Send the exact amount to the address above. We're checking automatically.");
+        // Start auto-polling
+        setTimeout(() => startPolling(data.order.id), 2000);
       }
     } catch (e) {
       toast.error((e as Error).message);
@@ -103,33 +124,80 @@ export function CheckoutModal() {
     }
   }
 
-  // Buyer confirms they sent payment — server scans the blockchain for a match
-  async function confirmPayment() {
+  // Auto-polling: check the blockchain every 8 seconds
+  const startPolling = useCallback((id: string) => {
+    if (pollTimer.current) return; // already polling
+    setPolling(true);
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/orders/${id}/check`);
+        const data = await res.json();
+        setPollCount((c) => c + 1);
+
+        if (data.verified) {
+          // Payment detected! Deliver
+          stopPolling();
+          setDelivered(data.delivered || "Payment auto-detected! Your purchase has been delivered.");
+          setEmailSent(!!data.emailSent);
+          setStep("success");
+          toast.success("Payment auto-detected! 🎉");
+          return;
+        }
+
+        if (data.found && !foundTx) {
+          setFoundTx(true);
+          setVerifyMsg("Transaction detected! Waiting for it to confirm the exact amount...");
+          toast.info("Transaction detected — verifying amount...");
+        } else if (!data.found) {
+          setVerifyMsg(
+            pollCountRef.current === 0
+              ? "Waiting for your payment... Send the exact amount to the address above. We're checking automatically."
+              : `Still waiting... (${pollCountRef.current} checks done). Send exactly ${cryptoAmountRef.current.toFixed(8)} ${methodRef.current} to the address. Transactions usually appear within 1-5 minutes.`
+          );
+        }
+      } catch {
+        // network error — keep trying
+      }
+
+      // schedule next poll in 8 seconds
+      pollTimer.current = setTimeout(poll, 8000);
+    };
+
+    poll();
+  }, [stopPolling, foundTx]);
+
+  // refs to access latest values inside poll closure
+  const pollCountRef = useRef(0);
+  const cryptoAmountRef = useRef(0);
+  const methodRef = useRef("LTC");
+  useEffect(() => { pollCountRef.current = pollCount; }, [pollCount]);
+  useEffect(() => { cryptoAmountRef.current = cryptoAmount; }, [cryptoAmount]);
+  useEffect(() => { methodRef.current = method; }, [method]);
+
+  // manual "check now" button (in addition to auto-polling)
+  async function checkNow() {
     if (!orderId) return;
-    setConfirming(true);
-    setVerifyMsg(null);
+    setPolling(true);
     try {
-      const res = await fetch(`/api/orders/${orderId}/confirm`, {
-        method: "POST",
-      });
+      const res = await fetch(`/api/orders/${orderId}/check`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to verify");
+      setPollCount((c) => c + 1);
       if (data.verified) {
-        setDelivered(data.delivered || "Payment verified on-chain! Your purchase has been delivered.");
+        stopPolling();
+        setDelivered(data.delivered || "Payment verified! Your purchase has been delivered.");
         setEmailSent(!!data.emailSent);
         setStep("success");
-        toast.success("Payment verified on the blockchain! 🎉");
+        toast.success("Payment detected! 🎉");
       } else {
-        // Payment not detected yet
-        setVerifyMsg(data.message || "No matching payment detected yet.");
-        setVerifyTries((t) => t + 1);
-        toast.error("Payment not detected yet — see details below.");
+        if (data.found && !foundTx) setFoundTx(true);
+        setVerifyMsg(data.message || "No payment detected yet — still checking...");
+        toast.info(data.message || "Still waiting for payment...");
       }
     } catch (e) {
-      setVerifyMsg(`Verification error: ${(e as Error).message}`);
       toast.error((e as Error).message);
     } finally {
-      setConfirming(false);
+      setPolling(false);
     }
   }
 
@@ -153,7 +221,7 @@ export function CheckoutModal() {
                 {isFree ? "Get Free Item" : "Secure Checkout"}
               </DialogTitle>
               <DialogDescription className="mt-1">
-                {isFree ? "No payment needed — instant delivery." : "Pay with crypto, get instant delivery"}
+                {isFree ? "No payment needed — instant delivery." : "Auto-detection — we watch the blockchain for you"}
               </DialogDescription>
             </div>
           </div>
@@ -235,14 +303,26 @@ export function CheckoutModal() {
 
                   <Button onClick={handleContinue} disabled={creating} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
                     {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                    {isFree ? "Get It Free" : "Continue to Payment"}
+                    {isFree ? "Get It Free" : "Show Payment Address"}
                   </Button>
                 </motion.div>
               )}
 
-              {/* STEP: pay — show address + amount + "I've Paid" button (no tx hash) */}
+              {/* STEP: pay — auto-polling */}
               {step === "pay" && selectedMethod && (
                 <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+                  {/* Auto-detection banner */}
+                  <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 p-3 ring-1 ring-emerald-glow/30">
+                    <Radio className="h-4 w-4 shrink-0 animate-pulse text-emerald-glow" />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-emerald-glow">Auto-detection is ON</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {polling ? `Checking blockchain every 8s · ${pollCount} ${pollCount === 1 ? "check" : "checks"} done` : "Starting auto-check..."}
+                      </p>
+                    </div>
+                    {polling && <Loader2 className="h-4 w-4 animate-spin text-emerald-glow" />}
+                  </div>
+
                   {/* Address */}
                   <div className="rounded-xl glass p-4 ring-1 ring-emerald-glow/30">
                     <Label className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
@@ -261,7 +341,7 @@ export function CheckoutModal() {
                   {/* Amount */}
                   <div className="rounded-xl bg-gold/10 p-4 ring-1 ring-gold/30">
                     <Label className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
-                      <Coins className="h-3.5 w-3.5" /> Amount to Send
+                      <Coins className="h-3.5 w-3.5" /> Exact Amount to Send
                     </Label>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-2xl font-bold text-gold">
@@ -276,40 +356,57 @@ export function CheckoutModal() {
                   </div>
 
                   <a href={selectedMethod.explorer} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1 text-xs text-emerald-glow hover:underline">
-                    Check explorer: {selectedMethod.explorer.replace("https://","")} <ExternalLink className="h-3 w-3" />
+                    View explorer: {selectedMethod.explorer.replace("https://","")} <ExternalLink className="h-3 w-3" />
                   </a>
 
                   {/* Instructions */}
                   <div className="rounded-xl bg-accent/15 p-3 text-xs text-muted-foreground ring-1 ring-border/40">
-                    <p className="font-medium text-foreground">How to pay</p>
-                    <p className="mt-1">1. Copy the <span className="text-emerald-glow font-semibold">address</span> and <span className="text-gold font-semibold">amount</span> above.<br/>2. Send the <span className="text-gold font-semibold">exact amount</span> from your crypto wallet.<br/>3. Once sent, click <span className="text-foreground font-semibold">&quot;I&apos;ve Paid — Verify&quot;</span> below. We scan the blockchain for your payment and deliver instantly once it&apos;s detected.</p>
+                    <p className="font-medium text-foreground">How it works</p>
+                    <p className="mt-1">
+                      1. Copy the <span className="text-emerald-glow font-semibold">address</span> and <span className="text-gold font-semibold">amount</span> above.<br/>
+                      2. Send the <span className="text-gold font-semibold">exact amount</span> from your crypto wallet.<br/>
+                      3. <span className="text-foreground font-semibold">That&apos;s it!</span> We automatically check the blockchain every 8 seconds. The moment your transaction appears (even pending), your product is delivered instantly — no need to click anything.
+                    </p>
                   </div>
 
-                  {/* Verification message */}
+                  {/* Status message */}
                   {verifyMsg && (
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 ring-1 ring-amber-500/30"
+                      className={cn(
+                        "flex items-start gap-2 rounded-xl p-3 ring-1",
+                        foundTx
+                          ? "bg-blue-500/10 ring-blue-500/30"
+                          : "bg-amber-500/10 ring-amber-500/30"
+                      )}
                     >
-                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                      {foundTx ? (
+                        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-400" />
+                      ) : (
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                      )}
                       <div className="flex-1">
-                        <p className="text-xs text-amber-200">{verifyMsg}</p>
-                        {verifyTries > 0 && (
-                          <p className="mt-1 text-[10px] text-amber-200/70">Attempt #{verifyTries} · Transactions can take 1–10 minutes to appear on-chain.</p>
+                        <p className={cn("text-xs", foundTx ? "text-blue-200" : "text-amber-200")}>{verifyMsg}</p>
+                        {pollCount > 0 && (
+                          <p className="mt-1 text-[10px] opacity-70">
+                            {foundTx ? "Confirming amount..." : `${pollCount} ${pollCount === 1 ? "check" : "checks"} done · auto-checking every 8s`}
+                          </p>
                         )}
                       </div>
                     </motion.div>
                   )}
 
-                  <Button onClick={confirmPayment} disabled={confirming} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
-                    {confirming ? <Loader2 className="h-4 w-4 animate-spin" /> : verifyMsg ? <RefreshCw className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
-                    {confirming ? "Scanning blockchain..." : verifyMsg ? "Check Again" : "I've Paid — Verify"}
+                  {/* Manual check button (optional) */}
+                  <Button onClick={checkNow} disabled={polling} variant="outline" className="w-full gap-2 glass">
+                    {polling ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                    {polling ? "Checking..." : "Check Now"}
                   </Button>
+
                   <p className="text-center text-xs text-muted-foreground">
-                    🔒 We verify your payment directly on the blockchain — no manual approval needed.
+                    🔒 Live blockchain monitoring — your product delivers the instant your payment is detected.
                   </p>
-                  <button onClick={() => setStep("method")} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
+                  <button onClick={() => { stopPolling(); setStep("method"); }} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
                     ← Change method
                   </button>
                 </motion.div>
@@ -327,8 +424,8 @@ export function CheckoutModal() {
                     >
                       <CheckCircle2 className="h-9 w-9 text-emerald-glow" />
                     </motion.div>
-                    <h3 className="mt-3 text-xl font-bold text-gradient-emerald">{isFree ? "Delivered!" : "Payment Verified!"}</h3>
-                    <p className="text-sm text-muted-foreground">Confirmed on the blockchain — your purchase is delivered.</p>
+                    <h3 className="mt-3 text-xl font-bold text-gradient-emerald">{isFree ? "Delivered!" : "Payment Auto-Detected!"}</h3>
+                    <p className="text-sm text-muted-foreground">Your transaction was detected on the blockchain — purchase delivered.</p>
                   </div>
 
                   {delivered && (

@@ -205,3 +205,27 @@ Work Log:
 
 Stage Summary:
 - 3D logo image integrated. Bubble translucent navbar. Animated 3D home page with parallax, floating logo, aurora text, holo borders, 3D card rotations, glow effects. Design rated 8/10 by VLM. Fully verified working.
+
+---
+Task ID: 21
+Agent: Main Orchestrator
+Task: Add auto-detect payment polling, verify delete system, restart server.
+
+Work Log:
+- Created GET /api/orders/[id]/check endpoint: lightweight polling — scans Arsh's wallet for matching payment (pending OR confirmed), delivers instantly if found. Returns verified/found/amountReceived/message.
+- Rewrote checkout-modal.tsx with AUTO-POLLING:
+  * When buyer reaches "pay" step, polling starts automatically after 2s
+  * Polls /api/orders/[id]/check every 8 seconds
+  * Status banner: "Auto-detection is ON · Checking blockchain every 8s · N checks done" with spinning loader
+  * Found-tx state: when a tx is detected but amount not confirmed yet → blue "Transaction detected! Waiting for it to confirm..."
+  * Waiting state: amber "Waiting for your payment... Send the exact amount" + check counter
+  * On detection: auto-delivers, shows success screen "Payment Auto-Detected!"
+  * "Check Now" button for manual trigger (optional)
+  * Cleanup: stops polling on modal close / unmount / change method
+  * Button text changed from "I've Paid — Verify" to "Show Payment Address" (since verification is now automatic)
+- Delete system verified: DELETE /api/products/[id] works (tested: 6 products → 5 after delete). Delete buttons exist in Upload dashboard (admin) for products, stock, and open source.
+- Lint: clean.
+- Tests: check endpoint returns verified:false,found:false,"Waiting for your payment..." (no payment). Delete endpoint returns {"success":true}. Browser: auto-detection banner + "Checking..." button confirmed.
+
+Stage Summary:
+- Auto-detect payment polling implemented — buyer clicks Buy → sees address → system auto-checks blockchain every 8s → delivers the instant a matching pending/confirmed tx appears. Delete system works (admin dashboard). Server restarted.
