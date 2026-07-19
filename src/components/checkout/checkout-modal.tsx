@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Copy, Check, Loader2, CheckCircle2, Clock, Coins, Mail,
-  ExternalLink, ArrowLeft, Zap, Download, FileArchive,
+  ExternalLink, ArrowLeft, Zap, Download, FileArchive, Radio,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -20,8 +20,7 @@ import { cn } from "@/lib/utils";
 
 type Step = "details" | "pay" | "success";
 
-// Safely parse a fetch response as JSON — never throws, even if the response
-// is plain text (like "Not Found" from a 404). Returns {} on parse failure.
+// Safely parse a fetch response as JSON — never throws
 async function safeJson(res: Response): Promise<any> {
   try {
     const text = await res.text();
@@ -49,11 +48,13 @@ export function CheckoutModal() {
   const [copied, setCopied] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
 
-  // Auto-polling
+  // Auto-polling — with a separate "checking" state so the UI stays responsive
   const [pollCount, setPollCount] = useState(0);
   const [foundTx, setFoundTx] = useState(false);
+  const [checking, setChecking] = useState(false); // true WHILE a check fetch is in-flight
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const orderIdRef = useRef<string | null>(null);
+  const isPollingRef = useRef(false);
 
   const target = checkoutTarget;
   const isFree = target?.price === 0;
@@ -62,10 +63,12 @@ export function CheckoutModal() {
   const selectedMethod = methods.find((m) => m.id === method);
 
   const stopPolling = useCallback(() => {
+    isPollingRef.current = false;
     if (pollTimer.current) {
       clearTimeout(pollTimer.current);
       pollTimer.current = null;
     }
+    setChecking(false);
   }, []);
 
   useEffect(() => {
@@ -77,7 +80,9 @@ export function CheckoutModal() {
       setDeliveredFile(null);
       setPollCount(0);
       setFoundTx(false);
+      setChecking(false);
       setEmailSent(false);
+      isPollingRef.current = false;
     } else {
       stopPolling();
     }
@@ -114,7 +119,8 @@ export function CheckoutModal() {
         setStep("success");
       } else {
         setStep("pay");
-        setTimeout(() => startPolling(data.order.id), 2000);
+        // Start auto-polling after a short delay
+        setTimeout(() => startPolling(data.order.id), 1500);
       }
     } catch (e) {
       toast.error((e as Error).message);
@@ -123,12 +129,18 @@ export function CheckoutModal() {
     }
   }
 
+  // Auto-polling loop — uses refs to avoid stale closures
   const startPolling = useCallback((id: string) => {
-    if (pollTimer.current) return;
+    if (isPollingRef.current) return;
+    isPollingRef.current = true;
+
     const poll = async () => {
+      if (!isPollingRef.current) return;
+      setChecking(true);
       try {
         const res = await fetch(`/api/orders/${id}/check`);
         const data = await safeJson(res);
+        if (!isPollingRef.current) return; // stopped during fetch
         setPollCount((c) => c + 1);
         if (data.verified) {
           stopPolling();
@@ -142,14 +154,23 @@ export function CheckoutModal() {
         if (data.found) {
           setFoundTx(true);
         }
-      } catch { /* keep trying */ }
-      pollTimer.current = setTimeout(poll, 8000);
+      } catch {
+        /* keep trying */
+      } finally {
+        if (isPollingRef.current) setChecking(false);
+      }
+      // Schedule next poll — only if still polling
+      if (isPollingRef.current) {
+        pollTimer.current = setTimeout(poll, 8000);
+      }
     };
     poll();
   }, [stopPolling]);
 
+  // Manual check button
   async function checkNow() {
-    if (!orderId) return;
+    if (!orderId || checking) return;
+    setChecking(true);
     try {
       const res = await fetch(`/api/orders/${orderId}/check`);
       const data = await safeJson(res);
@@ -167,6 +188,8 @@ export function CheckoutModal() {
       }
     } catch (e) {
       toast.error((e as Error).message);
+    } finally {
+      setChecking(false);
     }
   }
 
@@ -277,23 +300,82 @@ export function CheckoutModal() {
                 </motion.div>
               )}
 
-              {/* STEP 2: Pay — clean, mysellauth-style */}
+              {/* STEP 2: Pay — with proper loading animation */}
               {step === "pay" && selectedMethod && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-                  {/* Status indicator */}
-                  <div className={cn(
-                    "flex items-center gap-2 rounded-lg p-3 text-sm ring-1",
-                    foundTx ? "bg-blue-500/10 ring-blue-500/30" : "bg-amber-500/10 ring-amber-500/30"
-                  )}>
-                    {foundTx ? (
-                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-400" />
-                    ) : (
-                      <Clock className="h-4 w-4 shrink-0 text-amber-400" />
+                  {/* Live status indicator — always animated, never freezes */}
+                  <motion.div
+                    className={cn(
+                      "relative flex items-center gap-2.5 overflow-hidden rounded-lg p-3 text-sm ring-1",
+                      checking
+                        ? "bg-emerald-500/10 ring-emerald-glow/30"
+                        : foundTx
+                        ? "bg-blue-500/10 ring-blue-500/30"
+                        : "bg-amber-500/10 ring-amber-500/30"
                     )}
-                    <span className={cn("text-xs", foundTx ? "text-blue-200" : "text-amber-200")}>
-                      {foundTx ? "Transaction detected — confirming amount..." : "Waiting for payment"}
+                  >
+                    {/* Animated pulse ring — pure CSS, never blocks */}
+                    <div className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+                      {checking ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-emerald-glow" />
+                      ) : foundTx ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+                      ) : (
+                        <Clock className="h-4 w-4 text-amber-400" />
+                      )}
+                      {/* Pulsing radio waves when checking */}
+                      {checking && (
+                        <>
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
+                          <Radio className="absolute h-3 w-3 text-emerald-glow animate-pulse" />
+                        </>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={checking ? "checking" : foundTx ? "found" : "waiting"}
+                          initial={{ opacity: 0, y: 5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -5 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <span className={cn(
+                            "text-xs font-medium block",
+                            checking ? "text-emerald-200" : foundTx ? "text-blue-200" : "text-amber-200"
+                          )}>
+                            {checking
+                              ? "Scanning blockchain..."
+                              : foundTx
+                              ? "Transaction detected — confirming amount..."
+                              : "Waiting for payment"}
+                          </span>
+                        </motion.div>
+                      </AnimatePresence>
+                    </div>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {pollCount} {pollCount === 1 ? "check" : "checks"}
                     </span>
-                    <span className="ml-auto text-[10px] text-muted-foreground">{pollCount} checks</span>
+                  </motion.div>
+
+                  {/* Animated progress dots — pure CSS animation, always smooth */}
+                  <div className="flex items-center justify-center gap-1.5">
+                    {[0, 1, 2].map((i) => (
+                      <motion.span
+                        key={i}
+                        className="h-1.5 w-1.5 rounded-full bg-emerald-glow"
+                        animate={{ opacity: [0.2, 1, 0.2] }}
+                        transition={{
+                          duration: 1.2,
+                          repeat: Infinity,
+                          delay: i * 0.2,
+                          ease: "easeInOut",
+                        }}
+                      />
+                    ))}
+                    <span className="ml-2 text-[10px] text-muted-foreground">
+                      {checking ? "verifying..." : "auto-check every 8s"}
+                    </span>
                   </div>
 
                   {/* Send to address */}
@@ -342,8 +424,9 @@ export function CheckoutModal() {
                     <p>Send the exact amount from any wallet. We check the blockchain automatically every 8 seconds — your product delivers the moment your transaction appears (even pending).</p>
                   </div>
 
-                  <Button onClick={checkNow} variant="outline" className="w-full gap-2 text-xs">
-                    <Loader2 className="h-3.5 w-3.5" /> Check now ({pollCount})
+                  <Button onClick={checkNow} disabled={checking} variant="outline" className="w-full gap-2 text-xs">
+                    {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5" />}
+                    {checking ? "Checking..." : `Check now (${pollCount})`}
                   </Button>
 
                   <button onClick={() => { stopPolling(); setStep("details"); }} className="flex w-full items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground">
@@ -414,6 +497,10 @@ export function CheckoutModal() {
                       <Mail className="h-3.5 w-3.5" /> A copy was sent to your email.
                     </div>
                   )}
+
+                  <div className="rounded-lg bg-accent/20 p-2.5 text-center text-xs text-muted-foreground">
+                    💾 Your purchase is saved in <button onClick={() => { closeCheckout(); }} className="text-emerald-glow underline">My Orders</button> — you can re-download anytime.
+                  </div>
 
                   <Button onClick={closeCheckout} className="w-full bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
                     Done
