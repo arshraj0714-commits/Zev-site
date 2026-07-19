@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Upload, Package, Boxes, Code2, Image as ImageIcon, X, Plus,
-  CheckCircle2, Loader2, Trash2, ShieldCheck, Lock, Mail, LogOut,
+  CheckCircle2, Loader2, Trash2, ShieldCheck, Lock, LogOut,
 } from "lucide-react";
 import { SectionHeading } from "@/components/site/section-heading";
 import { Button } from "@/components/ui/button";
@@ -87,92 +87,41 @@ function ImageUpload({
   );
 }
 
-// ---------- Login screen ----------
-function LoginScreen() {
-  const { setAuth } = useZev();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email || !password) {
-      toast.error("Enter email and password");
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Login failed");
-      setAuth(data.user, data.token);
-      toast.success(`Welcome back, ${data.user.name.split(" ")[0]}!`);
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
+// ---------- Access gate (redirects to auth / shows notice) ----------
+function AccessGate({ reason }: { reason: "signed-out" | "not-admin" }) {
+  const { go } = useZev();
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mx-auto mt-8 max-w-md"
-    >
-      <div className="rounded-3xl glass-strong p-8 ring-1 ring-border/40">
-        <div className="flex flex-col items-center text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-gold/20 to-emerald-500/20 ring-1 ring-border/50 animate-pulse-glow">
-            <Lock className="h-8 w-8 text-gold" />
-          </div>
-          <h2 className="mt-4 text-2xl font-bold">Admin Access</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Sign in to manage products, stock, and orders.
-          </p>
+    <div className="mx-auto mt-8 max-w-md">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-3xl glass-strong p-8 text-center ring-1 ring-border/40"
+      >
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-gold/20 to-emerald-500/20 ring-1 ring-border/50 animate-pulse-glow">
+          <Lock className="h-8 w-8 text-gold" />
         </div>
-
-        <form onSubmit={handleLogin} className="mt-6 space-y-4">
-          <div>
-            <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</Label>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="glass"
-              placeholder="admin@email.com"
-              autoComplete="email"
-            />
-          </div>
-          <div>
-            <Label className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Password</Label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="glass"
-              placeholder="••••••••"
-              autoComplete="current-password"
-            />
-          </div>
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full gap-2 bg-gradient-to-r from-gold to-amber-400 text-black hover:from-amber-400 hover:to-gold"
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-            {loading ? "Signing in..." : "Sign In"}
-          </Button>
-        </form>
-
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          🔒 Head admin only. Unauthorized access is logged.
+        <h2 className="mt-4 text-2xl font-bold">
+          {reason === "signed-out" ? "Admin Access" : "Admins Only"}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {reason === "signed-out"
+            ? "Sign in to your account to manage products, stock, and orders."
+            : "This dashboard is restricted to admins. Your account doesn't have admin access."}
         </p>
-      </div>
-    </motion.div>
+        <Button
+          onClick={() => go("auth")}
+          className="mt-6 w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950 hover:from-emerald-400 hover:to-emerald-300"
+        >
+          <ShieldCheck className="h-4 w-4" /> Sign In / Sign Up
+        </Button>
+        <button
+          onClick={() => go("home")}
+          className="mt-3 w-full text-center text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          ← Back to home
+        </button>
+      </motion.div>
+    </div>
   );
 }
 
@@ -318,11 +267,25 @@ export function UploadView() {
     return (
       <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
         <SectionHeading
-          eyebrow="Admin Panel"
+          eyebrow="Dashboard"
           title="Upload & Manage"
-          subtitle="Sign in with your admin credentials to manage products, stock, and orders."
+          subtitle="Sign in to manage products, stock, and orders."
         />
-        <LoginScreen />
+        <AccessGate reason="signed-out" />
+      </div>
+    );
+  }
+
+  // Non-admin users can't access the dashboard
+  if (admin.role !== "admin") {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+        <SectionHeading
+          eyebrow="Dashboard"
+          title="Upload & Manage"
+          subtitle="This area is restricted to administrators."
+        />
+        <AccessGate reason="not-admin" />
       </div>
     );
   }

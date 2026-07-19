@@ -84,7 +84,7 @@ export function HomeView() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
               </span>
-              <span className="text-muted-foreground">Trusted by <span className="font-semibold text-foreground">{vouches.toLocaleString()}+ vouches</span></span>
+              <span className="text-muted-foreground">Trusted by <span className="font-semibold text-foreground">{vouches.toLocaleString()}+ people</span></span>
             </motion.div>
 
             <motion.h1

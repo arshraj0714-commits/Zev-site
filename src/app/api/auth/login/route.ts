@@ -1,20 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyCredentials, createToken, ADMIN_USER } from "@/lib/auth";
+import { findUserByEmail, verifyPassword, createToken, toAppUser, isAdminEmail } from "@/lib/auth";
+import { db } from "@/lib/db";
 
+// POST /api/auth/login
 export async function POST(req: NextRequest) {
   try {
     const { email, password } = await req.json();
     if (!email || !password) {
-      return NextResponse.json({ error: "Email and password required" }, { status: 400 });
+      return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
     }
-    if (!verifyCredentials(email, password)) {
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+
+    const emailLower = email.trim().toLowerCase();
+    let user = await findUserByEmail(emailLower);
+
+    // Backward-compat: if Arsh's owner email has no DB account yet but the
+    // legacy owner password is supplied, auto-provision the admin account.
+    if (!user && isAdminEmail(emailLower)) {
+      const ADMIN_LEGACY_PASS = "@rsh0712";
+      if (password === ADMIN_LEGACY_PASS) {
+        user = await db.user.create({
+          data: {
+            email: emailLower,
+            passwordHash: (await import("@/lib/auth")).hashPassword(password),
+            name: "Arsh Raj Sharma",
+            role: "admin",
+          },
+        });
+      }
     }
-    const token = createToken(ADMIN_USER);
+
+    if (!user || !verifyPassword(password, user.passwordHash)) {
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    }
+
+    const appUser = toAppUser(user);
+    const token = createToken(appUser);
+
     return NextResponse.json({
       token,
-      user: ADMIN_USER,
-      message: "Welcome back, Arsh!",
+      user: appUser,
+      message: isAdminEmail(emailLower)
+        ? "Welcome back, Arsh!"
+        : "Signed in successfully!",
     });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

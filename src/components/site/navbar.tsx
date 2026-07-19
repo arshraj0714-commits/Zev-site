@@ -1,10 +1,14 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Shield, ShieldCheck, Sparkles, LogOut } from "lucide-react";
+import { Menu, X, Sparkles, LogOut, LayoutDashboard, User as UserIcon } from "lucide-react";
 import { useZev, type ViewId } from "@/lib/store";
 import { ZevWordmark } from "./logo";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS: { id: ViewId; label: string }[] = [
@@ -12,7 +16,6 @@ const NAV_ITEMS: { id: ViewId; label: string }[] = [
   { id: "products", label: "Marketplace" },
   { id: "opensource", label: "Open Source" },
   { id: "stock", label: "Stock & Accounts" },
-  { id: "upload", label: "Upload" },
   { id: "about", label: "About" },
 ];
 
@@ -53,38 +56,58 @@ export function Navbar() {
           </nav>
 
           <div className="flex items-center gap-2">
+            {/* Account / Sign In */}
             {admin ? (
-              <div className="hidden sm:flex items-center gap-1.5">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => go("upload")}
-                  className="gap-2 text-gold"
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                  <span className="max-w-[100px] truncate">{admin.name.split(" ")[0]}</span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={logout}
-                  className="text-muted-foreground hover:text-rose-400"
-                  aria-label="Logout"
-                >
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-gold text-xs font-bold text-black">
+                      {admin.name.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="hidden max-w-[90px] truncate sm:inline">
+                      {admin.name.split(" ")[0]}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 glass-strong">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{admin.name}</p>
+                      <p className="text-xs leading-none text-muted-foreground">{admin.email}</p>
+                      {admin.role === "admin" && (
+                        <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-semibold text-gold ring-1 ring-gold/30">
+                          Admin
+                        </span>
+                      )}
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {admin.role === "admin" && (
+                    <DropdownMenuItem onClick={() => go("upload")} className="gap-2 cursor-pointer">
+                      <LayoutDashboard className="h-4 w-4" /> Dashboard
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => go("about")} className="gap-2 cursor-pointer">
+                    <UserIcon className="h-4 w-4" /> About
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={logout} className="gap-2 cursor-pointer text-rose-400 focus:text-rose-400">
+                    <LogOut className="h-4 w-4" /> Log out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => go("upload")}
-                className="hidden sm:flex gap-2"
+                onClick={() => go("auth")}
+                className="gap-2"
               >
-                <Shield className="h-4 w-4" />
-                Admin Login
+                <UserIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Sign In</span>
               </Button>
             )}
+
             <Button
               onClick={() => go("products")}
               size="sm"
@@ -130,36 +153,21 @@ export function Navbar() {
                   {item.label}
                 </button>
               ))}
+              <DropdownMenuSeparator className="my-2 bg-border/40" />
               {admin ? (
-                <div className="mt-2 flex items-center gap-2 px-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => go("upload")}
-                    className="flex-1 justify-start gap-2 text-gold"
-                  >
-                    <ShieldCheck className="h-4 w-4" />
-                    {admin.name.split(" ")[0]}
+                <>
+                  {admin.role === "admin" && (
+                    <Button variant="ghost" size="sm" onClick={() => { go("upload"); }} className="justify-start gap-2">
+                      <LayoutDashboard className="h-4 w-4" /> Dashboard
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={logout} className="justify-start gap-2 text-rose-400">
+                    <LogOut className="h-4 w-4" /> Log out ({admin.name.split(" ")[0]})
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={logout}
-                    className="gap-2 text-muted-foreground hover:text-rose-400"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Logout
-                  </Button>
-                </div>
+                </>
               ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => go("upload")}
-                  className="mt-2 justify-start gap-2"
-                >
-                  <Shield className="h-4 w-4" />
-                  Admin Login
+                <Button variant="ghost" size="sm" onClick={() => go("auth")} className="justify-start gap-2">
+                  <UserIcon className="h-4 w-4" /> Sign In / Sign Up
                 </Button>
               )}
             </nav>

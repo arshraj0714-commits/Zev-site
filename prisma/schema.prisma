@@ -89,3 +89,14 @@ model SiteStats {
   productsSold Int      @default(1573)
   updatedAt    DateTime @updatedAt
 }
+
+// Users for signup/login system
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  role         String   @default("user") // "user" | "admin"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

@@ -95,3 +95,31 @@ Work Log:
 
 Stage Summary:
 - All 4 issues fixed: hydration error gone, tx hash removed (simple "I've Paid" flow), admin login with arsh.raj.0713@gmail.com / @rsh0712 working, explorer error eliminated. Fully verified in browser.
+
+---
+Task ID: 17
+Agent: Main Orchestrator
+Task: Add email signup/login system with social buttons, auto-admin for Arsh, clean navbar, fix "vouches" text.
+
+Work Log:
+- Added User model to Prisma (email, passwordHash, name, role, timestamps). Pushed to DB.
+- Rewrote src/lib/auth.ts: scrypt password hashing (built-in crypto, no deps), HMAC-signed tokens, isAdminEmail() detects Arsh's email, createUser() auto-assigns "admin" role to arsh.raj.0713@gmail.com.
+- Created /api/auth/signup: validates email+password (6+ chars), checks for existing user, creates user with auto-admin for Arsh's email, returns token.
+- Updated /api/auth/login: checks User DB first; backward-compat auto-provisions Arsh's admin account if legacy password used.
+- Added "auth" to ViewId type + hash routing.
+- Built AuthView: signup/login tabs, Google/Apple/GitHub social buttons (inline SVG icons), email+password forms. On success: admins redirect to dashboard, regular users to home.
+- Cleaned Navbar: removed "Upload" from main nav, removed Admin toggle/Login buttons. Added account dropdown (avatar + name) when logged in, "Sign In" button when logged out. Admin users get "Dashboard" link in dropdown.
+- Updated UploadView: replaced embedded LoginScreen with AccessGate that redirects to auth page. Non-admin users see "Admins Only" gate.
+- Changed home hero badge: "Trusted by 1,000+ vouches" → "Trusted by 1,000+ people".
+- Agent Browser verification (all in single long-lived session):
+  * Nav: Home, Marketplace, Open Source, Stock & Accounts, About, Sign In, Browse Tools — NO Upload, NO Admin Login. ✓
+  * "Trusted by 1,000+ people" confirmed via DOM eval. ✓
+  * Auth page: Google/Apple/GitHub buttons + Sign Up/Sign In tabs. ✓
+  * Login as arsh.raj.0713@gmail.com / @rsh0712 → redirected to #/upload (admin dashboard). ✓
+  * "Welcome, Arsh" + Product/Stock/Open Source tabs + 6 products + 6 orders + Logout button. ✓
+  * 0 console/page errors. ✓
+- API tests (curl): regular user signup → role "user"; Arsh's email → role "admin" (auto); wrong password → "Invalid email or password". ✓
+- ESLint: clean.
+
+Stage Summary:
+- Full email signup/login system working with auto-admin for Arsh. Navbar cleaned. "Vouches" → "people". Social buttons (Google/Apple/GitHub) displayed. All verified in browser.
