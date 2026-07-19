@@ -229,3 +229,24 @@ Work Log:
 
 Stage Summary:
 - Auto-detect payment polling implemented — buyer clicks Buy → sees address → system auto-checks blockchain every 8s → delivers the instant a matching pending/confirmed tx appears. Delete system works (admin dashboard). Server restarted.
+
+---
+Task ID: 22
+Agent: Main Orchestrator
+Task: Clean Z logo (no bg), remove 3D from navbar, mysellauth-style checkout, fix server.
+
+Work Log:
+- Rewrote logo.tsx: replaced 3D image with clean SVG "Z" — pure gradient stroke (emerald→gold→emerald), no background, no hexagon frame, subtle drop-shadow glow. ZevLogo default animated=false (static in navbar).
+- Removed giant 3D floating logo from home hero (the 420px background logo + mobile floating logo). Removed unused ZevLogo import + logoScale transform. Hero is now clean text-focused.
+- Rewrote checkout-modal.tsx — mysellauth.com-inspired clean design:
+  * 3 steps: details → pay → success (compact, max-w-md)
+  * Details: email + discord + payment method as compact 2-col buttons (symbol + name) + total box
+  * Pay: status indicator (amber "Waiting for payment" / blue "Transaction detected") + "SEND {SYMBOL} TO" address with copy + "EXACT AMOUNT" with copy + Network info + explorer link + auto-detection info box + "Check now (N)" button + Back
+  * Success: checkmark + "Payment Detected!" + delivered content + email-sent note
+  * Removed all the heavy glass-bubble styling from modal — clean, focused, simple
+  * Auto-polling preserved (every 8s via /api/orders/[id]/check)
+- Lint: clean.
+- Browser verified: navbar shows clean Z logo ("Zev BY ARSH"), checkout flows details→pay with "Waiting for payment · 0 checks", address + exact amount + network + explorer link + auto-detection info all render. 0 errors.
+
+Stage Summary:
+- Logo is now a clean transparent-background SVG "Z". Navbar logo is static (no 3D). Checkout redesigned to mysellauth style — clean, compact, auto-detecting. Server restarted and verified working.

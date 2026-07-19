@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
-  Copy, Check, Wallet, Loader2, ShieldCheck, AlertCircle,
-  CheckCircle2, Sparkles, ArrowRight, Coins, Mail, ExternalLink, Radio,
+  Copy, Check, Loader2, CheckCircle2, Clock, Coins, Mail,
+  ExternalLink, ArrowLeft, Zap,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -12,20 +12,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { useZev } from "@/lib/store";
 import { usePrices } from "@/hooks/use-data";
 import { ItemImage } from "@/components/site/item-image";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-type Step = "method" | "pay" | "success";
+type Step = "details" | "pay" | "success";
 
 export function CheckoutModal() {
   const { checkoutOpen, checkoutTarget, closeCheckout } = useZev();
   const { data: pricesData } = usePrices();
 
-  const [step, setStep] = useState<Step>("method");
+  const [step, setStep] = useState<Step>("details");
   const [method, setMethod] = useState<string>("LTC");
   const [email, setEmail] = useState("");
   const [discord, setDiscord] = useState("");
@@ -34,38 +33,34 @@ export function CheckoutModal() {
   const [address, setAddress] = useState("");
   const [creating, setCreating] = useState(false);
   const [delivered, setDelivered] = useState<string | null>(null);
-  const [verifyMsg, setVerifyMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
 
-  // Auto-polling state
-  const [polling, setPolling] = useState(false);
+  // Auto-polling
   const [pollCount, setPollCount] = useState(0);
   const [foundTx, setFoundTx] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const orderIdRef = useRef<string | null>(null);
 
   const target = checkoutTarget;
   const isFree = target?.price === 0;
-
   const methods = pricesData?.methods ?? [];
   const prices = pricesData?.prices ?? {};
+  const selectedMethod = methods.find((m) => m.id === method);
 
-  // Cleanup polling on unmount / modal close
   const stopPolling = useCallback(() => {
     if (pollTimer.current) {
       clearTimeout(pollTimer.current);
       pollTimer.current = null;
     }
-    setPolling(false);
   }, []);
 
   useEffect(() => {
     if (checkoutOpen) {
-      setStep("method");
+      setStep("details");
       setMethod("LTC");
       setOrderId(null);
       setDelivered(null);
-      setVerifyMsg(null);
       setPollCount(0);
       setFoundTx(false);
       setEmailSent(false);
@@ -78,17 +73,7 @@ export function CheckoutModal() {
 
   async function handleContinue() {
     if (!target) return;
-    if (isFree) {
-      await createOrder("LTC");
-      return;
-    }
-    await createOrder(method);
-  }
-
-  async function createOrder(m: string) {
-    if (!target) return;
     setCreating(true);
-    setVerifyMsg(null);
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -96,7 +81,7 @@ export function CheckoutModal() {
         body: JSON.stringify({
           itemType: target.itemType,
           itemId: target.itemId,
-          paymentMethod: m,
+          paymentMethod: method,
           buyerEmail: email || undefined,
           buyerDiscord: discord || undefined,
         }),
@@ -104,8 +89,9 @@ export function CheckoutModal() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create order");
       setOrderId(data.order.id);
+      orderIdRef.current = data.order.id;
       setCryptoAmount(data.order.cryptoAmount);
-      const methodInfo = methods.find((mm) => mm.id === m);
+      const methodInfo = methods.find((mm) => mm.id === method);
       setAddress(methodInfo?.address ?? "");
       if (data.order.status === "paid" && data.order.deliveredContent) {
         setDelivered(data.order.deliveredContent);
@@ -113,8 +99,6 @@ export function CheckoutModal() {
         setStep("success");
       } else {
         setStep("pay");
-        setVerifyMsg("Waiting for your payment... Send the exact amount to the address above. We're checking automatically.");
-        // Start auto-polling
         setTimeout(() => startPolling(data.order.id), 2000);
       }
     } catch (e) {
@@ -124,162 +108,130 @@ export function CheckoutModal() {
     }
   }
 
-  // Auto-polling: check the blockchain every 8 seconds
   const startPolling = useCallback((id: string) => {
-    if (pollTimer.current) return; // already polling
-    setPolling(true);
-
+    if (pollTimer.current) return;
     const poll = async () => {
       try {
         const res = await fetch(`/api/orders/${id}/check`);
         const data = await res.json();
         setPollCount((c) => c + 1);
-
         if (data.verified) {
-          // Payment detected! Deliver
           stopPolling();
-          setDelivered(data.delivered || "Payment auto-detected! Your purchase has been delivered.");
+          setDelivered(data.delivered || "Payment auto-detected!");
           setEmailSent(!!data.emailSent);
           setStep("success");
-          toast.success("Payment auto-detected! 🎉");
+          toast.success("Payment detected! 🎉");
           return;
         }
-
-        if (data.found && !foundTx) {
+        if (data.found) {
           setFoundTx(true);
-          setVerifyMsg("Transaction detected! Waiting for it to confirm the exact amount...");
-          toast.info("Transaction detected — verifying amount...");
-        } else if (!data.found) {
-          setVerifyMsg(
-            pollCountRef.current === 0
-              ? "Waiting for your payment... Send the exact amount to the address above. We're checking automatically."
-              : `Still waiting... (${pollCountRef.current} checks done). Send exactly ${cryptoAmountRef.current.toFixed(8)} ${methodRef.current} to the address. Transactions usually appear within 1-5 minutes.`
-          );
         }
-      } catch {
-        // network error — keep trying
-      }
-
-      // schedule next poll in 8 seconds
+      } catch { /* keep trying */ }
       pollTimer.current = setTimeout(poll, 8000);
     };
-
     poll();
-  }, [stopPolling, foundTx]);
+  }, [stopPolling]);
 
-  // refs to access latest values inside poll closure
-  const pollCountRef = useRef(0);
-  const cryptoAmountRef = useRef(0);
-  const methodRef = useRef("LTC");
-  useEffect(() => { pollCountRef.current = pollCount; }, [pollCount]);
-  useEffect(() => { cryptoAmountRef.current = cryptoAmount; }, [cryptoAmount]);
-  useEffect(() => { methodRef.current = method; }, [method]);
-
-  // manual "check now" button (in addition to auto-polling)
   async function checkNow() {
     if (!orderId) return;
-    setPolling(true);
     try {
       const res = await fetch(`/api/orders/${orderId}/check`);
       const data = await res.json();
       setPollCount((c) => c + 1);
       if (data.verified) {
         stopPolling();
-        setDelivered(data.delivered || "Payment verified! Your purchase has been delivered.");
+        setDelivered(data.delivered || "Payment verified!");
         setEmailSent(!!data.emailSent);
         setStep("success");
         toast.success("Payment detected! 🎉");
       } else {
-        if (data.found && !foundTx) setFoundTx(true);
-        setVerifyMsg(data.message || "No payment detected yet — still checking...");
-        toast.info(data.message || "Still waiting for payment...");
+        if (data.found) setFoundTx(true);
+        toast.info(data.found ? "Transaction detected — confirming..." : "No payment detected yet");
       }
     } catch (e) {
       toast.error((e as Error).message);
-    } finally {
-      setPolling(false);
     }
   }
 
   function copy(text: string, label: string) {
     navigator.clipboard.writeText(text);
     setCopied(label);
-    toast.success(`${label} copied!`);
+    toast.success(`${label} copied`);
     setTimeout(() => setCopied(null), 2000);
   }
 
-  const selectedMethod = methods.find((m) => m.id === method);
-
   return (
     <Dialog open={checkoutOpen} onOpenChange={(o) => !o && closeCheckout()}>
-      <DialogContent className="max-w-lg overflow-hidden border-border/40 bg-card/95 p-0 backdrop-blur-2xl sm:max-w-xl">
+      <DialogContent className="max-w-md overflow-hidden border-border/40 bg-card/95 p-0 backdrop-blur-2xl">
         <DialogHeader className="border-b border-border/40 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <DialogTitle className="flex items-center gap-2 text-xl">
-                <Wallet className="h-5 w-5 text-gold" />
-                {isFree ? "Get Free Item" : "Secure Checkout"}
-              </DialogTitle>
-              <DialogDescription className="mt-1">
-                {isFree ? "No payment needed — instant delivery." : "Auto-detection — we watch the blockchain for you"}
-              </DialogDescription>
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-gold">
+              <Zap className="h-4 w-4 text-black" />
             </div>
-          </div>
+            Zev Checkout
+          </DialogTitle>
+          <DialogDescription className="mt-1 text-xs">
+            {step === "success" ? "Complete" : isFree ? "Free delivery" : "Auto-detect payment · instant delivery"}
+          </DialogDescription>
         </DialogHeader>
 
         {target && (
-          <div className="max-h-[70vh] overflow-y-auto">
-            {/* Item summary */}
-            <div className="flex gap-3 border-b border-border/40 p-5">
-              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl glass ring-1 ring-border/40">
+          <div className="max-h-[75vh] overflow-y-auto">
+            {/* Item summary — compact */}
+            <div className="flex items-center gap-3 border-b border-border/40 p-4">
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg glass ring-1 ring-border/40">
                 <ItemImage src={target.image} alt={target.name} seed={target.name} />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="truncate font-bold">{target.name}</h3>
-                <p className="line-clamp-2 text-xs text-muted-foreground">{target.description}</p>
-                <div className="mt-1 flex items-center gap-2">
+                <h3 className="truncate text-sm font-bold">{target.name}</h3>
+                <div className="mt-0.5 flex items-center gap-2">
                   {isFree ? (
-                    <Badge className="bg-emerald-500/90 text-emerald-950">FREE</Badge>
+                    <span className="text-xs font-bold text-emerald-glow">FREE</span>
                   ) : (
-                    <span className="text-lg font-bold text-gold">${target.price.toFixed(2)}</span>
+                    <span className="text-base font-bold text-gold">${target.price.toFixed(2)}</span>
                   )}
                 </div>
               </div>
+              {selectedMethod && !isFree && step === "pay" && (
+                <div className="text-right">
+                  <div className="text-xs text-muted-foreground">{selectedMethod.symbol}</div>
+                  <div className="text-sm font-bold" style={{ color: selectedMethod.color }}>
+                    {cryptoAmount.toFixed(method === "BTC" || method === "LTC" ? 6 : 4)}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Steps */}
             <div className="p-5">
-              {/* STEP: method + contact */}
-              {step === "method" && (
-                <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email (for delivery)</Label>
-                      <Input value={email} onChange={(e)=>setEmail(e.target.value)} className="glass" placeholder="you@email.com" type="email" />
-                    </div>
-                    <div>
-                      <Label>Discord (optional)</Label>
-                      <Input value={discord} onChange={(e)=>setDiscord(e.target.value)} className="glass" placeholder="username" />
-                    </div>
+              {/* STEP 1: Details + method */}
+              {step === "details" && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+                  <div>
+                    <Label className="text-xs"><Mail className="inline h-3 w-3 mr-1" />Email for delivery</Label>
+                    <Input value={email} onChange={(e)=>setEmail(e.target.value)} className="glass mt-1" placeholder="you@email.com" type="email" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Discord (optional)</Label>
+                    <Input value={discord} onChange={(e)=>setDiscord(e.target.value)} className="glass mt-1" placeholder="username" />
                   </div>
 
                   {!isFree && (
                     <div>
-                      <Label className="mb-2 block">Choose Payment Method</Label>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <Label className="mb-2 block text-xs">Payment Method</Label>
+                      <div className="grid grid-cols-2 gap-2">
                         {methods.map((m) => (
                           <button
                             key={m.id}
                             onClick={() => setMethod(m.id)}
                             className={cn(
-                              "rounded-xl p-3 text-center ring-1 transition-all",
+                              "flex items-center gap-2 rounded-lg p-2.5 ring-1 transition-all",
                               method === m.id
-                                ? "bg-accent/40 ring-gold scale-105"
+                                ? "bg-accent/40 ring-gold"
                                 : "glass ring-border/40 hover:ring-border"
                             )}
                           >
-                            <div className="text-sm font-bold" style={{ color: m.color }}>{m.symbol}</div>
-                            <div className="text-[10px] text-muted-foreground">${(prices[m.id] ?? 0).toFixed(prices[m.id] < 1 ? 4 : 2)}</div>
+                            <span className="text-sm font-bold" style={{ color: m.color }}>{m.symbol}</span>
+                            <span className="text-xs text-muted-foreground truncate">{m.name}</span>
                           </button>
                         ))}
                       </div>
@@ -287,165 +239,139 @@ export function CheckoutModal() {
                   )}
 
                   {!isFree && selectedMethod && (
-                    <div className="rounded-xl bg-accent/20 p-4 ring-1 ring-border/40">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">You'll pay approximately</span>
+                    <div className="rounded-lg bg-accent/20 p-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Total</span>
                         <span className="font-bold text-gold">
                           {(target.price / (prices[method] || 1)).toFixed(method === "BTC" || method === "LTC" ? 6 : 4)} {method}
                         </span>
                       </div>
-                      <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                      <div className="mt-0.5 flex justify-between text-xs text-muted-foreground">
                         <span>= ${target.price.toFixed(2)} USD</span>
-                        <span>Rate: 1 {method} = ${(prices[method] ?? 0).toFixed(2)}</span>
+                        <span>1 {method} = ${(prices[method] ?? 0).toFixed(2)}</span>
                       </div>
                     </div>
                   )}
 
                   <Button onClick={handleContinue} disabled={creating} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
-                    {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                    {isFree ? "Get It Free" : "Show Payment Address"}
+                    {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {isFree ? "Get Free" : "Continue to Payment"}
                   </Button>
                 </motion.div>
               )}
 
-              {/* STEP: pay — auto-polling */}
+              {/* STEP 2: Pay — clean, mysellauth-style */}
               {step === "pay" && selectedMethod && (
-                <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
-                  {/* Auto-detection banner */}
-                  <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 p-3 ring-1 ring-emerald-glow/30">
-                    <Radio className="h-4 w-4 shrink-0 animate-pulse text-emerald-glow" />
-                    <div className="flex-1">
-                      <p className="text-xs font-medium text-emerald-glow">Auto-detection is ON</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {polling ? `Checking blockchain every 8s · ${pollCount} ${pollCount === 1 ? "check" : "checks"} done` : "Starting auto-check..."}
-                      </p>
-                    </div>
-                    {polling && <Loader2 className="h-4 w-4 animate-spin text-emerald-glow" />}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+                  {/* Status indicator */}
+                  <div className={cn(
+                    "flex items-center gap-2 rounded-lg p-3 text-sm ring-1",
+                    foundTx ? "bg-blue-500/10 ring-blue-500/30" : "bg-amber-500/10 ring-amber-500/30"
+                  )}>
+                    {foundTx ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-400" />
+                    ) : (
+                      <Clock className="h-4 w-4 shrink-0 text-amber-400" />
+                    )}
+                    <span className={cn("text-xs", foundTx ? "text-blue-200" : "text-amber-200")}>
+                      {foundTx ? "Transaction detected — confirming amount..." : "Waiting for payment"}
+                    </span>
+                    <span className="ml-auto text-[10px] text-muted-foreground">{pollCount} checks</span>
                   </div>
 
-                  {/* Address */}
-                  <div className="rounded-xl glass p-4 ring-1 ring-emerald-glow/30">
-                    <Label className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
-                      <Wallet className="h-3.5 w-3.5" /> Send {selectedMethod.symbol} to this address
-                    </Label>
-                    <div className="mt-2 flex items-center gap-2">
-                      <code className="flex-1 truncate rounded-lg bg-background/60 px-3 py-2 text-sm font-mono text-emerald-glow">
+                  {/* Send to address */}
+                  <div className="space-y-3">
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Send {selectedMethod.symbol} to</div>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 truncate rounded-lg bg-background/80 px-3 py-2.5 text-xs font-mono text-emerald-glow ring-1 ring-border/40">
                         {address}
                       </code>
-                      <Button size="icon" variant="outline" className="glass shrink-0" onClick={() => copy(address, "Address")}>
+                      <Button size="icon" variant="outline" className="shrink-0" onClick={() => copy(address, "Address")}>
                         {copied === "Address" ? <Check className="h-4 w-4 text-emerald-glow" /> : <Copy className="h-4 w-4" />}
                       </Button>
                     </div>
                   </div>
 
-                  {/* Amount */}
-                  <div className="rounded-xl bg-gold/10 p-4 ring-1 ring-gold/30">
-                    <Label className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
-                      <Coins className="h-3.5 w-3.5" /> Exact Amount to Send
-                    </Label>
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="text-2xl font-bold text-gold">
-                        {cryptoAmount.toFixed(method === "BTC" || method === "LTC" ? 8 : 6)} {selectedMethod.symbol}
-                      </span>
-                      <Button size="sm" variant="outline" className="glass gap-1" onClick={() => copy(cryptoAmount.toFixed(8), "Amount")}>
+                  {/* Exact amount */}
+                  <div className="space-y-3">
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Exact Amount</div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 rounded-lg bg-background/80 px-3 py-2.5 ring-1 ring-gold/30">
+                        <span className="font-mono text-base font-bold text-gold">
+                          {cryptoAmount.toFixed(method === "BTC" || method === "LTC" ? 8 : 6)}
+                        </span>
+                        <span className="ml-1 text-xs text-muted-foreground">{selectedMethod.symbol}</span>
+                      </div>
+                      <Button size="sm" variant="outline" className="shrink-0 gap-1" onClick={() => copy(cryptoAmount.toFixed(8), "Amount")}>
                         {copied === "Amount" ? <Check className="h-3.5 w-3.5 text-emerald-glow" /> : <Copy className="h-3.5 w-3.5" />}
-                        Copy
                       </Button>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">≈ ${target.price.toFixed(2)} USD</p>
+                    <div className="text-xs text-muted-foreground">≈ ${target.price.toFixed(2)} USD</div>
+                  </div>
+
+                  {/* Network */}
+                  <div className="flex items-center justify-between rounded-lg bg-background/40 px-3 py-2 text-xs">
+                    <span className="text-muted-foreground">Network</span>
+                    <span className="font-medium">{selectedMethod.chain}</span>
                   </div>
 
                   <a href={selectedMethod.explorer} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1 text-xs text-emerald-glow hover:underline">
-                    View explorer: {selectedMethod.explorer.replace("https://","")} <ExternalLink className="h-3 w-3" />
+                    View on {selectedMethod.explorer.replace("https://","")} <ExternalLink className="h-3 w-3" />
                   </a>
 
-                  {/* Instructions */}
-                  <div className="rounded-xl bg-accent/15 p-3 text-xs text-muted-foreground ring-1 ring-border/40">
-                    <p className="font-medium text-foreground">How it works</p>
-                    <p className="mt-1">
-                      1. Copy the <span className="text-emerald-glow font-semibold">address</span> and <span className="text-gold font-semibold">amount</span> above.<br/>
-                      2. Send the <span className="text-gold font-semibold">exact amount</span> from your crypto wallet.<br/>
-                      3. <span className="text-foreground font-semibold">That&apos;s it!</span> We automatically check the blockchain every 8 seconds. The moment your transaction appears (even pending), your product is delivered instantly — no need to click anything.
-                    </p>
+                  {/* Info */}
+                  <div className="rounded-lg bg-emerald-500/5 p-3 text-xs text-muted-foreground ring-1 ring-emerald-glow/10">
+                    <p className="font-medium text-emerald-glow mb-1">⚡ Auto-detection active</p>
+                    <p>Send the exact amount from any wallet. We check the blockchain automatically every 8 seconds — your product delivers the moment your transaction appears (even pending).</p>
                   </div>
 
-                  {/* Status message */}
-                  {verifyMsg && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={cn(
-                        "flex items-start gap-2 rounded-xl p-3 ring-1",
-                        foundTx
-                          ? "bg-blue-500/10 ring-blue-500/30"
-                          : "bg-amber-500/10 ring-amber-500/30"
-                      )}
-                    >
-                      {foundTx ? (
-                        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-400" />
-                      ) : (
-                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-                      )}
-                      <div className="flex-1">
-                        <p className={cn("text-xs", foundTx ? "text-blue-200" : "text-amber-200")}>{verifyMsg}</p>
-                        {pollCount > 0 && (
-                          <p className="mt-1 text-[10px] opacity-70">
-                            {foundTx ? "Confirming amount..." : `${pollCount} ${pollCount === 1 ? "check" : "checks"} done · auto-checking every 8s`}
-                          </p>
-                        )}
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {/* Manual check button (optional) */}
-                  <Button onClick={checkNow} disabled={polling} variant="outline" className="w-full gap-2 glass">
-                    {polling ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                    {polling ? "Checking..." : "Check Now"}
+                  <Button onClick={checkNow} variant="outline" className="w-full gap-2 text-xs">
+                    <Loader2 className="h-3.5 w-3.5" /> Check now ({pollCount})
                   </Button>
 
-                  <p className="text-center text-xs text-muted-foreground">
-                    🔒 Live blockchain monitoring — your product delivers the instant your payment is detected.
-                  </p>
-                  <button onClick={() => { stopPolling(); setStep("method"); }} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
-                    ← Change method
+                  <button onClick={() => { stopPolling(); setStep("details"); }} className="flex w-full items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                    <ArrowLeft className="h-3 w-3" /> Back
                   </button>
                 </motion.div>
               )}
 
-              {/* STEP: success */}
+              {/* STEP 3: Success */}
               {step === "success" && (
                 <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
-                  <div className="flex flex-col items-center text-center">
+                  <div className="flex flex-col items-center text-center py-2">
                     <motion.div
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                       transition={{ type: "spring", stiffness: 200, damping: 12 }}
-                      className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 ring-2 ring-emerald-glow"
+                      className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20 ring-2 ring-emerald-glow"
                     >
-                      <CheckCircle2 className="h-9 w-9 text-emerald-glow" />
+                      <CheckCircle2 className="h-8 w-8 text-emerald-glow" />
                     </motion.div>
-                    <h3 className="mt-3 text-xl font-bold text-gradient-emerald">{isFree ? "Delivered!" : "Payment Auto-Detected!"}</h3>
-                    <p className="text-sm text-muted-foreground">Your transaction was detected on the blockchain — purchase delivered.</p>
+                    <h3 className="mt-3 text-lg font-bold text-gradient-emerald">
+                      {isFree ? "Delivered!" : "Payment Detected!"}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {isFree ? "Your product is ready." : "Auto-verified on the blockchain."}
+                    </p>
                   </div>
 
                   {delivered && (
-                    <div className="rounded-xl glass p-4 ring-1 ring-emerald-glow/30">
-                      <Label className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-emerald-glow">
-                        <Sparkles className="h-3.5 w-3.5" /> Your Purchase
-                      </Label>
-                      <pre className="mt-2 max-h-60 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-background/60 p-3 text-sm font-mono text-foreground">
+                    <div className="rounded-lg glass p-3 ring-1 ring-emerald-glow/30">
+                      <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-emerald-glow">
+                        <Coins className="h-3.5 w-3.5" /> Your Purchase
+                      </div>
+                      <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2.5 text-xs font-mono">
                         {delivered}
                       </pre>
-                      <Button size="sm" variant="outline" className="mt-2 glass gap-1" onClick={() => copy(delivered, "Content")}>
-                        {copied === "Content" ? <Check className="h-3.5 w-3.5 text-emerald-glow" /> : <Copy className="h-3.5 w-3.5" />} Copy content
+                      <Button size="sm" variant="outline" className="mt-2 gap-1 text-xs" onClick={() => copy(delivered, "Content")}>
+                        {copied === "Content" ? <Check className="h-3 w-3 text-emerald-glow" /> : <Copy className="h-3 w-3" />} Copy
                       </Button>
                     </div>
                   )}
 
                   {emailSent && (
-                    <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 p-3 ring-1 ring-emerald-glow/20">
-                      <Mail className="h-4 w-4 shrink-0 text-emerald-glow" />
-                      <p className="text-xs text-emerald-200">A copy of your purchase has been sent to your email.</p>
+                    <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 p-2.5 text-xs text-emerald-200 ring-1 ring-emerald-glow/20">
+                      <Mail className="h-3.5 w-3.5" /> A copy was sent to your email.
                     </div>
                   )}
 

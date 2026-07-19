@@ -10,7 +10,6 @@ import { useProducts, useStats, usePrices } from "@/hooks/use-data";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/site/section-heading";
 import { MarketplaceCard, type CardItem } from "@/components/site/marketplace-card";
-import { ZevLogo } from "@/components/site/logo";
 import { SITE_CONFIG } from "@/lib/config";
 import { useEffect, useRef, useState } from "react";
 
@@ -59,7 +58,6 @@ export function HomeView() {
   const { scrollYProgress } = useScroll();
   const heroY = useTransform(scrollYProgress, [0, 0.3], [0, -80]);
   const heroOpacity = useTransform(scrollYProgress, [0, 0.25], [1, 0.4]);
-  const logoScale = useTransform(scrollYProgress, [0, 0.2], [1, 0.85]);
 
   const featured = (productsData?.products ?? [])
     .filter((p) => p.featured)
@@ -76,20 +74,8 @@ export function HomeView() {
 
   return (
     <div className="space-y-28 pb-12">
-      {/* ===== HERO — 3D animated ===== */}
+      {/* ===== HERO ===== */}
       <section className="relative overflow-hidden pt-12 sm:pt-16">
-        {/* Floating 3D logo behind hero */}
-        <motion.div
-          style={{ scale: logoScale }}
-          className="pointer-events-none absolute left-1/2 top-[55%] -z-10 hidden -translate-x-1/2 -translate-y-1/2 lg:block"
-        >
-          <div className="scene-3d">
-            <div className="animate-float-3d">
-              <ZevLogo className="h-[420px] w-[420px] opacity-[0.12]" animated={false} />
-            </div>
-          </div>
-        </motion.div>
-
         <motion.div style={{ y: heroY, opacity: heroOpacity }} className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center text-center">
             {/* Badge */}
@@ -104,18 +90,6 @@ export function HomeView() {
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
               </span>
               <span className="text-muted-foreground">Trusted by <span className="font-semibold text-foreground">{vouches.toLocaleString()}+ people</span></span>
-            </motion.div>
-
-            {/* 3D Floating Logo (mobile + visible) */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.6, rotateY: -30 }}
-              animate={{ opacity: 1, scale: 1, rotateY: 0 }}
-              transition={{ type: "spring", stiffness: 120, damping: 16, delay: 0.1 }}
-              className="scene-3d mt-8 lg:hidden"
-            >
-              <div className="animate-float-3d">
-                <ZevLogo className="h-32 w-32" animated={false} />
-              </div>
             </motion.div>
 
             {/* Heading */}
