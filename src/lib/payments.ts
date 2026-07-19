@@ -1,187 +1,137 @@
 // Blockchain payment verification service for Zev
-// Verifies real on-chain transactions for BTC / LTC / SOL / USDT(BEP20)
-// Uses free public APIs (no API key required).
+// Scans Arsh's wallet address for incoming transactions matching the exact
+// expected amount (pending OR confirmed). Only then is a purchase delivered.
 
 import { WALLET_ADDRESSES, USDT_BSC_CONTRACT, type CryptoMethod } from "./config";
 
-export interface VerifyResult {
-  verified: boolean;
-  found: boolean;
-  confirmed: boolean;
-  matchedAddress: boolean;
+export interface ScanResult {
+  verified: boolean;          // a matching tx was found (pending or confirmed)
+  found: boolean;             // at least one recent tx to the address was found
+  confirmed: boolean;         // the matching tx is confirmed
   matchedAmount: boolean;
-  amountReceived: number; // in crypto units (BTC/LTC/SOL/USDT)
-  explorerUrl: string;
+  amountReceived: number;     // in crypto units
+  txHash: string | null;      // the matching tx hash (for the buyer's reference)
+  explorerUrl: string;        // link to the tx on the explorer
+  checkedAddress: string;
+  expectedAmount: number;
   error?: string;
 }
 
-const SOL_LAMPORTS = 1_000_000_000; // 1 SOL = 1e9 lamports
-const USDT_DECIMALS = 18; // USDT on BSC has 18 decimals
+const SOL_LAMPORTS = 1_000_000_000;
+const USDT_DECIMALS = 18;
 
-// ---------- BTC verification (blockstream.info) ----------
-async function verifyBTC(txHash: string, expectedAddress: string, expectedAmount: number): Promise<VerifyResult> {
-  const base: VerifyResult = {
-    verified: false, found: false, confirmed: false,
-    matchedAddress: false, matchedAmount: false, amountReceived: 0,
-    explorerUrl: `https://btcscan.org/tx/${txHash}`,
+// ---------- BTC: scan address for incoming txs (mempool + recent confirmed) ----------
+async function scanBTC(addr: string, expectedAmount: number): Promise<ScanResult> {
+  const base: ScanResult = {
+    verified: false, found: false, confirmed: false, matchedAmount: false,
+    amountReceived: 0, txHash: null,
+    explorerUrl: `https://btcscan.org/address/${addr}`,
+    checkedAddress: addr, expectedAmount,
   };
   try {
-    const res = await fetch(`https://blockstream.info/api/tx/${txHash}`, {
-      headers: { Accept: "application/json" },
-    });
-    if (res.status === 404) return { ...base, error: "Transaction not found on Bitcoin network." };
-    if (!res.ok) return { ...base, error: `Bitcoin explorer error (${res.status}).` };
-    const data = await res.json();
-    base.found = true;
-    base.confirmed = !!data?.status?.confirmed;
+    // mempool (unconfirmed) + recent confirmed txs for the address
+    const [memRes, confRes] = await Promise.all([
+      fetch(`https://blockstream.info/api/address/${addr}/txs/mempool`),
+      fetch(`https://blockstream.info/api/address/${addr}/txs`),
+    ]);
+    const memTxs = memRes.ok ? await memRes.json() : [];
+    const confTxs = confRes.ok ? await confRes.json() : [];
+    const allTxs: any[] = [...(Array.isArray(memTxs) ? memTxs : []), ...(Array.isArray(confTxs) ? confTxs : [])];
+
     const expectedSats = Math.round(expectedAmount * 1e8);
-    let received = 0;
-    let matchedAddr = false;
-    for (const vout of data.vout ?? []) {
-      const addr = vout.scriptpubkey_address;
-      if (addr && addr === expectedAddress) {
-        matchedAddr = true;
-        received += vout.value ?? 0;
+    for (const tx of allTxs) {
+      let received = 0;
+      for (const vout of tx.vout ?? []) {
+        if (vout.scriptpubkey_address === addr) {
+          received += vout.value ?? 0;
+        }
       }
-    }
-    base.matchedAddress = matchedAddr;
-    base.amountReceived = received / 1e8;
-    base.matchedAmount = received >= expectedSats;
-    base.verified = base.confirmed && matchedAddr && base.matchedAmount;
-    return base;
-  } catch (e) {
-    return { ...base, error: `Bitcoin verification failed: ${(e as Error).message}` };
-  }
-}
-
-// ---------- LTC verification (litecoinblockexplorer.net) ----------
-async function verifyLTC(txHash: string, expectedAddress: string, expectedAmount: number): Promise<VerifyResult> {
-  const base: VerifyResult = {
-    verified: false, found: false, confirmed: false,
-    matchedAddress: false, matchedAmount: false, amountReceived: 0,
-    explorerUrl: `https://litecoinspace.org/tx/${txHash}`,
-  };
-  try {
-    const res = await fetch(`https://litecoinblockexplorer.net/api/v2/tx/${txHash}`);
-    if (res.status === 404) return { ...base, error: "Transaction not found on Litecoin network." };
-    if (!res.ok) return { ...base, error: `Litecoin explorer error (${res.status}).` };
-    const data = await res.json();
-    base.found = true;
-    base.confirmed = data?.confirmations ? data.confirmations > 0 : true;
-    let received = 0;
-    let matchedAddr = false;
-    for (const vout of data.vout ?? []) {
-      const addrs: string[] = vout.addresses ?? [];
-      if (addrs.includes(expectedAddress)) {
-        matchedAddr = true;
-        received += parseFloat(vout.value ?? "0");
-      }
-    }
-    base.matchedAddress = matchedAddr;
-    base.amountReceived = received;
-    base.matchedAmount = received >= expectedAmount - 1e-8;
-    base.verified = base.confirmed && matchedAddr && base.matchedAmount;
-    return base;
-  } catch (e) {
-    return { ...base, error: `Litecoin verification failed: ${(e as Error).message}` };
-  }
-}
-
-// ---------- SOL verification (Solana RPC) ----------
-async function verifySOL(txHash: string, expectedAddress: string, expectedAmount: number): Promise<VerifyResult> {
-  const base: VerifyResult = {
-    verified: false, found: false, confirmed: false,
-    matchedAddress: false, matchedAmount: false, amountReceived: 0,
-    explorerUrl: `https://solscan.io/tx/${txHash}`,
-  };
-  try {
-    const rpcs = [
-      "https://api.mainnet-beta.solana.com",
-      "https://solana-rpc.publicnode.com",
-    ];
-    let data: any = null;
-    let lastErr = "";
-    for (const rpc of rpcs) {
-      try {
-        const res = await fetch(rpc, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0", id: 1, method: "getTransaction",
-            params: [txHash, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }],
-          }),
-        });
-        if (!res.ok) { lastErr = `RPC ${res.status}`; continue; }
-        const json = await res.json();
-        if (json?.result) { data = json.result; break; }
-        lastErr = json?.error?.message ?? "not found";
-      } catch (e) { lastErr = (e as Error).message; }
-    }
-    if (!data) return { ...base, error: `Solana transaction not found. ${lastErr}` };
-    base.found = true;
-    base.confirmed = true; // getTransaction only returns confirmed txs
-    const expectedLamports = Math.round(expectedAmount * SOL_LAMPORTS);
-    let receivedLamports = 0;
-    let matchedAddr = false;
-    const instructions = data?.transaction?.message?.instructions ?? [];
-    const innerInstructions = data?.meta?.innerInstructions ?? [];
-    const allInstr = [...instructions, ...innerInstructions.flatMap((i: any) => i.instructions ?? [])];
-    for (const ix of allInstr) {
-      const parsed = ix?.parsed;
-      if (parsed?.type === "transfer" && parsed.info) {
-        const dest = parsed.info.destination;
-        const lamports = parsed.info.lamports ?? 0;
-        if (dest && dest === expectedAddress) {
-          matchedAddr = true;
-          receivedLamports += lamports;
+      if (received > 0) {
+        base.found = true;
+        if (received >= expectedSats) {
+          base.matchedAmount = true;
+          base.amountReceived = received / 1e8;
+          base.txHash = tx.txid;
+          base.confirmed = !!(tx.status?.confirmed);
+          base.explorerUrl = `https://btcscan.org/tx/${tx.txid}`;
+          base.verified = true; // accept pending too
+          return base;
         }
       }
     }
-    // Also check pre/post token balances for any native SOL balance changes (fallback)
-    if (!matchedAddr) {
-      const postBalances: number[] = data?.meta?.postTokenBalances ?? [];
-      const preBalances: number[] = data?.meta?.preTokenBalances ?? [];
-      // native balances
-      const postNative: number[] = data?.meta?.postBalances ?? [];
-      const preNative: number[] = data?.meta?.preBalances ?? [];
-      const accountKeys: string[] = data?.transaction?.message?.accountKeys?.map((k: any) => (typeof k === "string" ? k : k.pubkey)) ?? [];
-      for (let i = 0; i < accountKeys.length; i++) {
-        if (accountKeys[i] === expectedAddress) {
-          const post = postNative[i] ?? 0;
-          const pre = preNative[i] ?? 0;
-          const delta = post - pre;
-          if (delta > 0) {
-            matchedAddr = true;
-            receivedLamports += delta;
+    return base;
+  } catch (e) {
+    return { ...base, error: `Bitcoin scan failed: ${(e as Error).message}` };
+  }
+}
+
+// ---------- LTC: scan address for incoming txs ----------
+async function scanLTC(addr: string, expectedAmount: number): Promise<ScanResult> {
+  const base: ScanResult = {
+    verified: false, found: false, confirmed: false, matchedAmount: false,
+    amountReceived: 0, txHash: null,
+    explorerUrl: `https://litecoinspace.org/address/${addr}`,
+    checkedAddress: addr, expectedAmount,
+  };
+  try {
+    // 1. get the list of tx ids for the address
+    const addrRes = await fetch(`https://litecoinblockexplorer.net/api/v2/address/${addr}`);
+    if (!addrRes.ok) return { ...base, error: `Litecoin explorer error (${addrRes.status})` };
+    const addrData = await addrRes.json();
+    const txids: string[] = addrData.txids ?? [];
+    if (!Array.isArray(txids) || txids.length === 0) return base;
+
+    // 2. fetch each recent tx (limit to last 15) and check vouts to our address
+    const toCheck = txids.slice(0, 15);
+    for (const txid of toCheck) {
+      try {
+        const txRes = await fetch(`https://litecoinblockexplorer.net/api/v2/tx/${txid}`);
+        if (!txRes.ok) continue;
+        const tx = await txRes.json();
+        let received = 0;
+        for (const vout of tx.vout ?? []) {
+          const addrs: string[] = vout.addresses ?? [];
+          if (addrs.includes(addr)) {
+            received += parseFloat(vout.value ?? "0");
           }
         }
+        if (received > 0) {
+          base.found = true;
+          if (received >= expectedAmount - 1e-8) {
+            base.matchedAmount = true;
+            base.amountReceived = received;
+            base.txHash = tx.txid ?? txid;
+            base.confirmed = (tx.confirmations ?? 0) > 0;
+            base.explorerUrl = `https://litecoinspace.org/tx/${base.txHash}`;
+            base.verified = true;
+            return base;
+          }
+        }
+      } catch {
+        /* skip this tx */
       }
-      void postBalances; void preBalances;
     }
-    base.matchedAddress = matchedAddr;
-    base.amountReceived = receivedLamports / SOL_LAMPORTS;
-    base.matchedAmount = receivedLamports >= expectedLamports;
-    base.verified = base.confirmed && matchedAddr && base.matchedAmount;
     return base;
   } catch (e) {
-    return { ...base, error: `Solana verification failed: ${(e as Error).message}` };
+    return { ...base, error: `Litecoin scan failed: ${(e as Error).message}` };
   }
 }
 
-// ---------- USDT (BEP20) verification (BSC RPC) ----------
-async function verifyUSDT(txHash: string, expectedAddress: string, expectedAmount: number): Promise<VerifyResult> {
-  const base: VerifyResult = {
-    verified: false, found: false, confirmed: false,
-    matchedAddress: false, matchedAmount: false, amountReceived: 0,
-    explorerUrl: `https://bscscan.com/tx/${txHash}`,
+// ---------- SOL: scan address signatures for matching transfer ----------
+async function scanSOL(addr: string, expectedAmount: number): Promise<ScanResult> {
+  const base: ScanResult = {
+    verified: false, found: false, confirmed: false, matchedAmount: false,
+    amountReceived: 0, txHash: null,
+    explorerUrl: `https://solscan.io/account/${addr}`,
+    checkedAddress: addr, expectedAmount,
   };
+  const rpcs = [
+    "https://api.mainnet-beta.solana.com",
+    "https://solana-rpc.publicnode.com",
+  ];
   try {
-    const rpcs = [
-      "https://bsc-dataseed.binance.org",
-      "https://bsc-dataseed1.binance.org",
-      "https://bsc.publicnode.com",
-    ];
-    let receipt: any = null;
+    // 1. get recent signatures for the address
+    let sigs: any[] = [];
     let lastErr = "";
     for (const rpc of rpcs) {
       try {
@@ -189,58 +139,191 @@ async function verifyUSDT(txHash: string, expectedAddress: string, expectedAmoun
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt",
-            params: [txHash],
+            jsonrpc: "2.0", id: 1, method: "getSignaturesForAddress",
+            params: [addr, { limit: 15 }],
           }),
         });
         if (!res.ok) { lastErr = `RPC ${res.status}`; continue; }
         const json = await res.json();
-        if (json?.result) { receipt = json.result; break; }
+        if (Array.isArray(json?.result)) { sigs = json.result; break; }
         lastErr = json?.error?.message ?? "no result";
       } catch (e) { lastErr = (e as Error).message; }
     }
-    if (!receipt) return { ...base, error: `BSC transaction not found. ${lastErr}` };
-    base.found = true;
-    base.confirmed = receipt.status === "0x1";
-    const expectedRaw = BigInt(Math.round(expectedAmount * 10 ** USDT_DECIMALS));
-    const transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
-    const expectedAddrLower = expectedAddress.toLowerCase();
-    let receivedRaw = 0n;
-    let matchedAddr = false;
-    for (const log of receipt.logs ?? []) {
-      const addr = (log.address ?? "").toLowerCase();
-      if (addr !== USDT_BSC_CONTRACT.toLowerCase()) continue;
-      const topics: string[] = log.topics ?? [];
-      if (topics[0]?.toLowerCase() !== transferTopic) continue;
-      // topics[2] is the 'to' address padded to 32 bytes
-      const toTopic = topics[2] ?? "";
-      const toAddr = "0x" + toTopic.slice(-40);
-      if (toAddr.toLowerCase() === expectedAddrLower) {
-        matchedAddr = true;
-        try { receivedRaw += BigInt(log.data ?? "0x0"); } catch { /* ignore */ }
+
+    const expectedLamports = Math.round(expectedAmount * SOL_LAMPORTS);
+
+    // 2. check each signature's transaction for a transfer to our address
+    for (const sig of sigs) {
+      if (!sig.signature) continue;
+      let tx: any = null;
+      for (const rpc of rpcs) {
+        try {
+          const res = await fetch(rpc, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0", id: 1, method: "getTransaction",
+              params: [sig.signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }],
+            }),
+          });
+          if (!res.ok) continue;
+          const json = await res.json();
+          if (json?.result) { tx = json.result; break; }
+        } catch { /* try next rpc */ }
+      }
+      if (!tx) continue;
+
+      let receivedLamports = 0;
+      let matched = false;
+      // check parsed transfer instructions
+      const instructions = tx.transaction?.message?.instructions ?? [];
+      const innerInstructions = tx.meta?.innerInstructions ?? [];
+      const allInstr = [...instructions, ...innerInstructions.flatMap((i: any) => i.instructions ?? [])];
+      for (const ix of allInstr) {
+        const parsed = ix?.parsed;
+        if (parsed?.type === "transfer" && parsed.info) {
+          if (parsed.info.destination === addr) {
+            matched = true;
+            receivedLamports += parsed.info.lamports ?? 0;
+          }
+        }
+      }
+      // fallback: native balance delta
+      if (!matched) {
+        const postNative: number[] = tx.meta?.postBalances ?? [];
+        const preNative: number[] = tx.meta?.preBalances ?? [];
+        const accountKeys: string[] = tx.transaction?.message?.accountKeys?.map((k: any) =>
+          typeof k === "string" ? k : k.pubkey
+        ) ?? [];
+        for (let i = 0; i < accountKeys.length; i++) {
+          if (accountKeys[i] === addr) {
+            const delta = (postNative[i] ?? 0) - (preNative[i] ?? 0);
+            if (delta > 0) {
+              matched = true;
+              receivedLamports += delta;
+            }
+          }
+        }
+      }
+      if (matched) {
+        base.found = true;
+        if (receivedLamports >= expectedLamports) {
+          base.matchedAmount = true;
+          base.amountReceived = receivedLamports / SOL_LAMPORTS;
+          base.txHash = sig.signature;
+          base.confirmed = !sig.err;
+          base.explorerUrl = `https://solscan.io/tx/${sig.signature}`;
+          base.verified = true;
+          return base;
+        }
       }
     }
-    base.matchedAddress = matchedAddr;
-    base.amountReceived = Number(receivedRaw) / 10 ** USDT_DECIMALS;
-    base.matchedAmount = receivedRaw >= expectedRaw;
-    base.verified = base.confirmed && matchedAddr && base.matchedAmount;
+    if (!base.found && lastErr) base.error = `Solana scan: ${lastErr}`;
     return base;
   } catch (e) {
-    return { ...base, error: `USDT verification failed: ${(e as Error).message}` };
+    return { ...base, error: `Solana scan failed: ${(e as Error).message}` };
   }
 }
+
+// ---------- USDT (BEP20): scan Transfer logs to our address ----------
+async function scanUSDT(addr: string, expectedAmount: number): Promise<ScanResult> {
+  const base: ScanResult = {
+    verified: false, found: false, confirmed: false, matchedAmount: false,
+    amountReceived: 0, txHash: null,
+    explorerUrl: `https://bscscan.com/address/${addr}`,
+    checkedAddress: addr, expectedAmount,
+  };
+  const rpcs = [
+    "https://bsc-dataseed.binance.org",
+    "https://bsc-dataseed1.binance.org",
+    "https://bsc.publicnode.com",
+  ];
+  try {
+    const transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    const toTopic = "0x000000000000000000000000" + addr.toLowerCase().slice(2);
+    const expectedRaw = BigInt(Math.round(expectedAmount * 10 ** USDT_DECIMALS));
+
+    for (const rpc of rpcs) {
+      try {
+        // get latest block, then fetch logs from ~5000 blocks back (~4 hours)
+        const blockRes = await fetch(rpc, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] }),
+        });
+        if (!blockRes.ok) continue;
+        const blockJson = await blockRes.json();
+        const latest = parseInt(blockJson.result ?? "0x0", 16);
+        const fromBlock = "0x" + Math.max(0, latest - 5000).toString(16);
+
+        const logsRes = await fetch(rpc, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0", id: 1, method: "eth_getLogs",
+            params: [{
+              address: USDT_BSC_CONTRACT,
+              topics: [transferTopic, null, toTopic],
+              fromBlock,
+              toBlock: "latest",
+            }],
+          }),
+        });
+        if (!logsRes.ok) continue;
+        const logsJson = await logsRes.json();
+        const logs: any[] = logsJson?.result ?? [];
+        if (!Array.isArray(logs)) continue;
+
+        for (const log of logs) {
+          let amount: bigint;
+          try { amount = BigInt(log.data ?? "0x0"); } catch { continue; }
+          base.found = true;
+          if (amount >= expectedRaw) {
+            base.matchedAmount = true;
+            base.amountReceived = Number(amount) / 10 ** USDT_DECIMALS;
+            base.txHash = log.transactionHash;
+            base.confirmed = true; // eth_getLogs only returns mined txs
+            base.explorerUrl = `https://bscscan.com/tx/${log.transactionHash}`;
+            base.verified = true;
+            return base;
+          }
+        }
+        // if we got logs back without error, stop trying other rpcs
+        return base;
+      } catch (e) {
+        // try next rpc
+      }
+    }
+    return { ...base, error: "Could not reach BSC RPC to scan for payments." };
+  } catch (e) {
+    return { ...base, error: `USDT scan failed: ${(e as Error).message}` };
+  }
+}
+
+// Main entry: scan Arsh's wallet for a matching incoming payment
+export async function scanWalletForPayment(
+  method: CryptoMethod,
+  expectedAmount: number
+): Promise<ScanResult> {
+  const addr = WALLET_ADDRESSES[method];
+  switch (method) {
+    case "BTC": return scanBTC(addr, expectedAmount);
+    case "LTC": return scanLTC(addr, expectedAmount);
+    case "SOL": return scanSOL(addr, expectedAmount);
+    case "USDT": return scanUSDT(addr, expectedAmount);
+  }
+}
+
+// Legacy tx-hash verification (kept for the /api/verify-payment route)
+export type VerifyResult = ScanResult;
 
 export async function verifyPayment(
   method: CryptoMethod,
   txHash: string,
   expectedAmount: number
 ): Promise<VerifyResult> {
-  const tx = txHash.trim();
-  const addr = WALLET_ADDRESSES[method];
-  switch (method) {
-    case "BTC": return verifyBTC(tx, addr, expectedAmount);
-    case "LTC": return verifyLTC(tx, addr, expectedAmount);
-    case "SOL": return verifySOL(tx, addr, expectedAmount);
-    case "USDT": return verifyUSDT(tx, addr, expectedAmount);
-  }
+  // delegates to wallet scan — if a tx hash is provided, the scan will still
+  // find it among recent transactions if it matches the amount.
+  void txHash;
+  return scanWalletForPayment(method, expectedAmount);
 }

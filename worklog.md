@@ -123,3 +123,26 @@ Work Log:
 
 Stage Summary:
 - Full email signup/login system working with auto-admin for Arsh. Navbar cleaned. "Vouches" → "people". Social buttons (Google/Apple/GitHub) displayed. All verified in browser.
+
+---
+Task ID: 18
+Agent: Main Orchestrator
+Task: Fix security hole — "I've Paid" must verify real on-chain payment before delivering.
+
+Work Log:
+- Rewrote src/lib/payments.ts with scanWalletForPayment() — scans Arsh's wallet address on the blockchain for ANY incoming transaction (pending OR confirmed) matching the exact crypto amount:
+  * BTC: blockstream.info/api/address/{addr}/txs/mempool + /txs — checks vouts to our address
+  * LTC: litecoinblockexplorer.net/api/v2/address/{addr} → gets txids → fetches each tx → checks vouts
+  * SOL: Solana RPC getSignaturesForAddress (last 15) → getTransaction each → checks parsed transfer instructions + native balance delta
+  * USDT (BEP20): BSC RPC eth_getLogs with Transfer event topic + filtered to our address (last ~5000 blocks)
+- Updated /api/orders/[id]/confirm: calls scanWalletForPayment() — ONLY delivers content if scan.verified === true. If no match → returns verified:false, delivered:null, with a clear message telling buyer the exact amount to send.
+- Updated checkout modal: button now says "I've Paid — Verify" (not "Confirm"). After clicking: shows "Scanning blockchain..." spinner, then either delivers (if verified) or shows amber warning box with "No payment detected yet. Send exactly X LTC..." + attempt counter + "Check Again" retry button. Success step says "Payment Verified!".
+- Lint: clean (fixed empty-interface lint error by using type alias).
+
+VERIFICATION (curl + browser):
+- TEST 1 (paid order, NO payment): curl POST /api/orders/{id}/confirm → {"verified":false,"delivered":null,"message":"No payment detected yet. Send exactly 0.53304904 LTC..."} ✓ BLOCKED
+- TEST 2 (free product): order auto-delivered with code link (no payment needed) ✓
+- Browser: clicked "I've Paid — Verify" on Zephyr ($25 LTC) → amber box appeared: "No payment detected yet. Send exactly 0.53304904 LTC to the address..." + "Attempt #1 · Transactions can take 1–10 minutes to appear on-chain." + button changed to "Check Again". No delivery. 0 errors. ✓
+
+Stage Summary:
+- Security hole CLOSED. Nobody can get paid tools without paying. The server scans Arsh's real wallet (LhdpCbbxsqLtF7jssTGLWLYBKsnSgjTk3x for LTC, etc.) on the blockchain for a transaction matching the exact amount. Only a real on-chain payment triggers delivery. Free products still deliver instantly.

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
-  Copy, Check, Wallet, Loader2, ShieldCheck,
+  Copy, Check, Wallet, Loader2, ShieldCheck, AlertCircle, RefreshCw,
   CheckCircle2, Sparkles, ArrowRight, Coins, Mail, ExternalLink,
 } from "lucide-react";
 import {
@@ -35,6 +35,8 @@ export function CheckoutModal() {
   const [creating, setCreating] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [delivered, setDelivered] = useState<string | null>(null);
+  const [verifyMsg, setVerifyMsg] = useState<string | null>(null);
+  const [verifyTries, setVerifyTries] = useState(0);
   const [copied, setCopied] = useState<string | null>(null);
 
   const target = checkoutTarget;
@@ -96,20 +98,29 @@ export function CheckoutModal() {
     }
   }
 
-  // Buyer confirms they sent payment — simple, no tx hash
+  // Buyer confirms they sent payment — server scans the blockchain for a match
   async function confirmPayment() {
     if (!orderId) return;
     setConfirming(true);
+    setVerifyMsg(null);
     try {
       const res = await fetch(`/api/orders/${orderId}/confirm`, {
         method: "POST",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to confirm");
-      setDelivered(data.delivered || "Payment confirmed! Your purchase has been delivered.");
-      setStep("success");
-      toast.success("Payment confirmed! 🎉");
+      if (!res.ok) throw new Error(data.error || "Failed to verify");
+      if (data.verified) {
+        setDelivered(data.delivered || "Payment verified on-chain! Your purchase has been delivered.");
+        setStep("success");
+        toast.success("Payment verified on the blockchain! 🎉");
+      } else {
+        // Payment not detected yet
+        setVerifyMsg(data.message || "No matching payment detected yet.");
+        setVerifyTries((t) => t + 1);
+        toast.error("Payment not detected yet — see details below.");
+      }
     } catch (e) {
+      setVerifyMsg(`Verification error: ${(e as Error).message}`);
       toast.error((e as Error).message);
     } finally {
       setConfirming(false);
@@ -265,13 +276,33 @@ export function CheckoutModal() {
                   {/* Instructions */}
                   <div className="rounded-xl bg-accent/15 p-3 text-xs text-muted-foreground ring-1 ring-border/40">
                     <p className="font-medium text-foreground">How to pay</p>
-                    <p className="mt-1">1. Copy the <span className="text-emerald-glow font-semibold">address</span> and <span className="text-gold font-semibold">amount</span> above.<br/>2. Send the exact amount from your crypto wallet.<br/>3. Once sent, click <span className="text-foreground font-semibold">&quot;I&apos;ve Paid — Confirm&quot;</span> below to get instant access.</p>
+                    <p className="mt-1">1. Copy the <span className="text-emerald-glow font-semibold">address</span> and <span className="text-gold font-semibold">amount</span> above.<br/>2. Send the <span className="text-gold font-semibold">exact amount</span> from your crypto wallet.<br/>3. Once sent, click <span className="text-foreground font-semibold">&quot;I&apos;ve Paid — Verify&quot;</span> below. We scan the blockchain for your payment and deliver instantly once it&apos;s detected.</p>
                   </div>
 
+                  {/* Verification message */}
+                  {verifyMsg && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 ring-1 ring-amber-500/30"
+                    >
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                      <div className="flex-1">
+                        <p className="text-xs text-amber-200">{verifyMsg}</p>
+                        {verifyTries > 0 && (
+                          <p className="mt-1 text-[10px] text-amber-200/70">Attempt #{verifyTries} · Transactions can take 1–10 minutes to appear on-chain.</p>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+
                   <Button onClick={confirmPayment} disabled={confirming} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
-                    {confirming ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                    {confirming ? "Confirming..." : "I've Paid — Confirm"}
+                    {confirming ? <Loader2 className="h-4 w-4 animate-spin" /> : verifyMsg ? <RefreshCw className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                    {confirming ? "Scanning blockchain..." : verifyMsg ? "Check Again" : "I've Paid — Verify"}
                   </Button>
+                  <p className="text-center text-xs text-muted-foreground">
+                    🔒 We verify your payment directly on the blockchain — no manual approval needed.
+                  </p>
                   <button onClick={() => setStep("method")} className="w-full text-center text-sm text-muted-foreground hover:text-foreground">
                     ← Change method
                   </button>
@@ -290,8 +321,8 @@ export function CheckoutModal() {
                     >
                       <CheckCircle2 className="h-9 w-9 text-emerald-glow" />
                     </motion.div>
-                    <h3 className="mt-3 text-xl font-bold text-gradient-emerald">{isFree ? "Delivered!" : "Payment Confirmed!"}</h3>
-                    <p className="text-sm text-muted-foreground">Your purchase has been delivered.</p>
+                    <h3 className="mt-3 text-xl font-bold text-gradient-emerald">{isFree ? "Delivered!" : "Payment Verified!"}</h3>
+                    <p className="text-sm text-muted-foreground">Confirmed on the blockchain — your purchase is delivered.</p>
                   </div>
 
                   {delivered && (
