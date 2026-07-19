@@ -15,14 +15,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Zev | Premium Discord Tools & Bots by Arsh",
+  title: "Zev",
   description:
     "Zev — Professional Discord bots, tools, and digital marketplace by Arsh Raj Sharma. Buy premium tools with crypto (LTC/BTC/SOL/USDT) or grab free open-source code.",
   keywords: ["Zev", "Arsh", "Discord bots", "Discord tools", "crypto marketplace", "LTC", "BTC", "SOL", "USDT"],
   authors: [{ name: "Arsh Raj Sharma" }],
-  icons: { icon: "/logo.svg" },
+  icons: { icon: "/favicon.svg" },
   openGraph: {
-    title: "Zev | Premium Discord Tools & Bots",
+    title: "Zev",
     description: "Professional Discord tools, bots & marketplace by Arsh Raj Sharma.",
     siteName: "Zev",
     type: "website",
