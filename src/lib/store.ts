@@ -107,7 +107,9 @@ export const useZev = create<ZevStore>((set, get) => ({
           fetch("/api/auth/me", {
             headers: { Authorization: `Bearer ${parsed.token}` },
           })
-            .then((r) => r.json())
+            .then(async (r) => {
+              try { return await r.json(); } catch { return {}; }
+            })
             .then((data) => {
               if (data?.user) {
                 set({ admin: data.user, authToken: parsed.token, authLoading: false });

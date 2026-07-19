@@ -55,8 +55,26 @@ export interface PaymentMethod {
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed: ${res.status}`);
-  return res.json();
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try {
+      const data = await res.json();
+      msg = data.error || data.message || msg;
+    } catch {
+      try {
+        const text = await res.text();
+        if (text && text.length < 200) msg = text;
+      } catch {}
+    }
+    throw new Error(msg);
+  }
+  // Safely parse JSON — handle plain-text responses without crashing
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return {} as T;
+  }
 }
 
 export function useProducts(type: "all" | "paid" | "free" = "all") {

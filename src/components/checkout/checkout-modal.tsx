@@ -20,6 +20,18 @@ import { cn } from "@/lib/utils";
 
 type Step = "details" | "pay" | "success";
 
+// Safely parse a fetch response as JSON — never throws, even if the response
+// is plain text (like "Not Found" from a 404). Returns {} on parse failure.
+async function safeJson(res: Response): Promise<any> {
+  try {
+    const text = await res.text();
+    if (!text) return {};
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
 export function CheckoutModal() {
   const { checkoutOpen, checkoutTarget, closeCheckout } = useZev();
   const { data: pricesData } = usePrices();
@@ -86,7 +98,7 @@ export function CheckoutModal() {
           buyerDiscord: discord || undefined,
         }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || "Failed to create order");
       setOrderId(data.order.id);
       orderIdRef.current = data.order.id;
@@ -113,7 +125,7 @@ export function CheckoutModal() {
     const poll = async () => {
       try {
         const res = await fetch(`/api/orders/${id}/check`);
-        const data = await res.json();
+        const data = await safeJson(res);
         setPollCount((c) => c + 1);
         if (data.verified) {
           stopPolling();
@@ -136,7 +148,7 @@ export function CheckoutModal() {
     if (!orderId) return;
     try {
       const res = await fetch(`/api/orders/${orderId}/check`);
-      const data = await res.json();
+      const data = await safeJson(res);
       setPollCount((c) => c + 1);
       if (data.verified) {
         stopPolling();

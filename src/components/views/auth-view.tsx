@@ -68,7 +68,8 @@ export function AuthView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      let data: any = {};
+      try { data = await res.json(); } catch { data = {}; }
       if (!res.ok) throw new Error(data.error || "Something went wrong");
       setAuth(data.user, data.token);
       toast.success(data.message || "Success!");
