@@ -58,3 +58,6 @@ prompt
 /skills/
 /start-server.sh
 preview-*.png
+
+# Local Netlify folder
+.netlify
