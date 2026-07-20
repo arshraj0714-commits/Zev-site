@@ -4,6 +4,9 @@ import { verifyPayment } from "@/lib/payments";
 import { WALLET_ADDRESSES } from "@/lib/config";
 
 // POST /api/verify-payment  { orderId, txHash }
+// Legacy manual verification route. Now uses the same time + used-txHash
+// filtering as the auto-detect check endpoint, so old transactions can't
+// pay for new orders.
 export async function POST(req: NextRequest) {
   try {
     const { orderId, txHash } = await req.json();
@@ -21,10 +24,26 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Collect tx hashes already used by OTHER paid orders
+    const usedOrders = await db.order.findMany({
+      where: { status: "paid", txHash: { not: null } },
+      select: { txHash: true },
+    });
+    const usedTxHashes = new Set(
+      usedOrders.map((o) => o.txHash).filter((t): t is string => !!t)
+    );
+
+    // Only consider transactions that happened AFTER the order was created
+    const sinceTimestamp = Math.floor(order.createdAt.getTime() / 1000);
+
+    // verifyPayment now delegates to scanWalletForPayment with the same
+    // time + used-txHash filtering used by the auto-detect endpoint.
     const result = await verifyPayment(
       order.paymentMethod as keyof typeof WALLET_ADDRESSES,
       txHash.trim(),
-      order.cryptoAmount
+      order.cryptoAmount,
+      sinceTimestamp,
+      usedTxHashes
     );
 
     if (!result.verified) {

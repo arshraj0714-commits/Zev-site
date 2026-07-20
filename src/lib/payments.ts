@@ -220,7 +220,6 @@ async function scanSOL(
     const now = Math.floor(Date.now() / 1000);
     const maxAge = now - MAX_TX_AGE_SECONDS;
 
-    // eslint-disable-next-line no-console
     console.log("[SOL scan] order since:", sinceTimestamp, "| minTime:", minTime, "| maxAge:", maxAge, "| sigs:", sigs.length);
 
     for (const sig of sigs) {
@@ -229,7 +228,6 @@ async function scanSOL(
 
       // Skip transactions already used by another paid order
       if (usedTxHashes.has(signature)) {
-        // eslint-disable-next-line no-console
         console.log("[SOL scan] skipping used tx:", signature.slice(0, 20));
         continue;
       }
@@ -239,7 +237,6 @@ async function scanSOL(
       //   2. >= minTime (within 5 min before the order was created)
       //   3. >= maxAge (not older than 30 minutes from now — hard safety net)
       const blockTime: number | undefined = sig.blockTime;
-      // eslint-disable-next-line no-console
       console.log("[SOL scan] tx:", signature.slice(0, 20), "| blockTime:", blockTime, "| age:", blockTime ? `${Math.round((now - blockTime) / 60)}min` : "null");
 
       if (typeof blockTime !== "number") {
@@ -469,8 +466,10 @@ export type VerifyResult = ScanResult;
 export async function verifyPayment(
   method: CryptoMethod,
   txHash: string,
-  expectedAmount: number
+  expectedAmount: number,
+  sinceTimestamp: number = 0,
+  usedTxHashes: Set<string> = new Set()
 ): Promise<VerifyResult> {
   void txHash;
-  return scanWalletForPayment(method, expectedAmount);
+  return scanWalletForPayment(method, expectedAmount, sinceTimestamp, usedTxHashes);
 }
