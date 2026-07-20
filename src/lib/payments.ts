@@ -29,6 +29,11 @@ const USDT_DECIMALS = 18;
 // was created, to handle minor clock skew between servers and blockchains.
 const TIME_TOLERANCE_SECONDS = 5 * 60;
 
+// HARD MAXIMUM: transactions older than this are NEVER accepted, even if
+// sinceTimestamp is somehow wrong. This is the safety net that prevents
+// old incoming payments from paying for new orders. 30 minutes.
+const MAX_TX_AGE_SECONDS = 30 * 60;
+
 // ---------- BTC: scan address for incoming txs (mempool + recent confirmed) ----------
 async function scanBTC(
   addr: string,
@@ -54,6 +59,8 @@ async function scanBTC(
 
     const expectedSats = Math.round(expectedAmount * 1e8);
     const minTime = sinceTimestamp - TIME_TOLERANCE_SECONDS;
+    const now = Math.floor(Date.now() / 1000);
+    const maxAge = now - MAX_TX_AGE_SECONDS;
 
     for (const tx of allTxs) {
       const txid: string = tx.txid;
@@ -65,8 +72,10 @@ async function scanBTC(
       // - Mempool (unconfirmed) txs are always "new" — allow them
       const blockTime: number | undefined = tx.status?.block_time;
       const isMempool = !tx.status?.confirmed;
-      if (!isMempool && typeof blockTime === "number" && blockTime < minTime) {
-        continue; // this tx is older than the order — skip it
+      if (!isMempool) {
+        if (typeof blockTime !== "number") continue; // can't verify age — skip
+        if (blockTime < minTime) continue; // older than the order
+        if (blockTime < maxAge) continue; // HARD SAFETY NET: older than 30 min
       }
 
       let received = 0;
@@ -118,6 +127,8 @@ async function scanLTC(
 
     const toCheck = txids.slice(0, 15);
     const minTime = sinceTimestamp - TIME_TOLERANCE_SECONDS;
+    const now = Math.floor(Date.now() / 1000);
+    const maxAge = now - MAX_TX_AGE_SECONDS;
 
     for (const txid of toCheck) {
       if (usedTxHashes.has(txid)) continue;
@@ -130,8 +141,10 @@ async function scanLTC(
         const blockTime: number | undefined = tx.blockTime ?? tx.blocktime;
         const confirmations: number = tx.confirmations ?? 0;
         const isMempool = confirmations === 0;
-        if (!isMempool && typeof blockTime === "number" && blockTime < minTime) {
-          continue;
+        if (!isMempool) {
+          if (typeof blockTime !== "number") continue; // can't verify age — skip
+          if (blockTime < minTime) continue; // older than the order
+          if (blockTime < maxAge) continue; // HARD SAFETY NET: older than 30 min
         }
 
         let received = 0;
@@ -204,19 +217,41 @@ async function scanSOL(
 
     const expectedLamports = Math.round(expectedAmount * SOL_LAMPORTS);
     const minTime = sinceTimestamp - TIME_TOLERANCE_SECONDS;
+    const now = Math.floor(Date.now() / 1000);
+    const maxAge = now - MAX_TX_AGE_SECONDS;
+
+    // eslint-disable-next-line no-console
+    console.log("[SOL scan] order since:", sinceTimestamp, "| minTime:", minTime, "| maxAge:", maxAge, "| sigs:", sigs.length);
 
     for (const sig of sigs) {
       const signature: string = sig.signature;
       if (!signature) continue;
 
       // Skip transactions already used by another paid order
-      if (usedTxHashes.has(signature)) continue;
+      if (usedTxHashes.has(signature)) {
+        // eslint-disable-next-line no-console
+        console.log("[SOL scan] skipping used tx:", signature.slice(0, 20));
+        continue;
+      }
 
-      // Time check: skip old transactions.
-      // sig.blockTime is a unix timestamp (seconds) from Solana RPC.
+      // Time check — STRICT. The transaction's blockTime MUST be:
+      //   1. A valid number (not null/undefined)
+      //   2. >= minTime (within 5 min before the order was created)
+      //   3. >= maxAge (not older than 30 minutes from now — hard safety net)
       const blockTime: number | undefined = sig.blockTime;
-      if (typeof blockTime === "number" && blockTime < minTime) {
+      // eslint-disable-next-line no-console
+      console.log("[SOL scan] tx:", signature.slice(0, 20), "| blockTime:", blockTime, "| age:", blockTime ? `${Math.round((now - blockTime) / 60)}min` : "null");
+
+      if (typeof blockTime !== "number") {
+        // No blockTime — can't verify age, skip for safety
+        continue;
+      }
+      if (blockTime < minTime) {
         // Older than the order — definitely not the buyer's payment
+        continue;
+      }
+      if (blockTime < maxAge) {
+        // HARD SAFETY NET: older than 30 minutes from now — skip
         continue;
       }
 
@@ -356,6 +391,7 @@ async function scanUSDT(
 
           // Time check: fetch the block timestamp for this log's block
           // and skip it if the block is older than the order.
+          let blockAgeOk = false;
           try {
             const blkRes = await fetch(rpc, {
               method: "POST",
@@ -372,14 +408,17 @@ async function scanUSDT(
                 : undefined;
               if (typeof blockTimestamp === "number") {
                 const minTime = sinceTimestamp - TIME_TOLERANCE_SECONDS;
-                if (blockTimestamp < minTime) {
-                  continue; // this transfer is older than the order — skip
-                }
+                const maxAge = (Math.floor(Date.now() / 1000)) - MAX_TX_AGE_SECONDS;
+                if (blockTimestamp < minTime) continue; // older than the order
+                if (blockTimestamp < maxAge) continue; // HARD SAFETY NET: older than 30 min
+                blockAgeOk = true;
               }
             }
           } catch {
-            // if we can't fetch the block, fall through and check anyway
+            // if we can't fetch the block, skip this log for safety
+            continue;
           }
+          if (!blockAgeOk) continue; // couldn't verify age — skip for safety
 
           let amount: bigint;
           try { amount = BigInt(log.data ?? "0x0"); } catch { continue; }
