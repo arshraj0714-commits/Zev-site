@@ -1,0 +1,46 @@
+# Netlify Configuration for Zev
+# Docs: https://docs.netlify.com/configure-builds/file-based-configuration/
+
+[build]
+  # Build command — generates the Prisma client, then builds Next.js
+  command = "npx prisma generate && next build"
+
+  # Directory that contains the built site (Next.js auto-detects, but explicit is safe)
+  publish = ".next"
+
+  # Node version (Netlify supports Node 20)
+  [build.environment]
+    NODE_VERSION = "20"
+    NPM_FLAGS = "--legacy-peer-deps"
+    NEXT_TELEMETRY_DISABLED = "1"
+
+# Next.js plugin — Netlify auto-installs this, but declaring it ensures
+# the Next.js Runtime (server-side rendering, API routes) works correctly.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Security headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# Cache static assets aggressively
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/img/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Redirect rules (Next.js handles routing, but this is a fallback)
+[[redirects]]
+  from = "/*"
+  to = "/index"
+  status = 200

@@ -1,0 +1,109 @@
+// Zev - Prisma Schema
+// Professional Dev Marketplace for Arsh (Zev)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Marketplace products (paid/free Discord bots & tools)
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  image       String?
+  codeLink    String?
+  folder      String?
+  type        String   @default("paid") // "paid" | "free"
+  price       Float    @default(0) // USD price
+  tags        String? // comma separated
+  featured    Boolean  @default(false)
+  salesCount  Int      @default(0)
+  fileName    String? // original name of the attached zip, e.g. "MyBot.zip"
+  fileData    String? @db.Text // base64 data URL of the attached zip, delivered on purchase
+  fileSize    Int? // size of the attached zip in bytes (for display only)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orders      Order[]
+}
+
+// Stock / credentials marketplace (emails, accounts, etc.)
+model StockItem {
+  id           String   @id @default(cuid())
+  name         String
+  description  String
+  image        String?
+  category     String? // e.g. "Email", "Account", "Credential"
+  price        Float   @default(0) // USD price
+  quantity     Int     @default(1)
+  soldCount    Int     @default(0)
+  // The actual secret content revealed only after purchase.
+  // Stored as JSON: [{ label, value }]
+  credentials  String?
+  tags         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  orders       Order[]
+}
+
+// Open source free codes (always free)
+model OpenSource {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  image       String?
+  codeLink    String?
+  category    String? // "Discord Bot" | "Tool" | "Script"
+  tags        String?
+  stars       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Orders / purchases
+model Order {
+  id            String   @id @default(cuid())
+  orderNumber   String   @unique // human-readable, e.g. "ZEV-A4F2K9"
+  itemType      String // "product" | "stock"
+  productId     String?
+  stockId       String?
+  product       Product?  @relation(fields: [productId], references: [id])
+  stock         StockItem? @relation(fields: [stockId], references: [id])
+  itemName      String
+  amount        Float // USD amount
+  paymentMethod String // "LTC" | "BTC" | "SOL" | "USDT"
+  cryptoAmount  Float // amount in crypto
+  txHash        String?
+  buyerEmail    String?
+  buyerDiscord  String?
+  status        String   @default("pending") // "pending" | "paid" | "failed"
+  deliveredContent String? // revealed content snapshot
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([buyerEmail])
+  @@index([status])
+}
+
+// Site-wide stats (singleton row)
+model SiteStats {
+  id           String   @id @default("singleton")
+  vouches      Int      @default(1000)
+  productsSold Int      @default(1573)
+  updatedAt    DateTime @updatedAt
+}
+
+// Users for signup/login system
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  role         String   @default("user") // "user" | "admin"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
