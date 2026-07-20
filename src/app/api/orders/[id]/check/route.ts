@@ -29,10 +29,27 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       });
     }
 
+    // Collect the set of tx hashes already used by OTHER paid orders, so the
+    // scanner can skip them (prevents an old transfer from paying for a new order).
+    const usedOrders = await db.order.findMany({
+      where: { status: "paid", txHash: { not: null } },
+      select: { txHash: true },
+    });
+    const usedTxHashes = new Set(
+      usedOrders.map((o) => o.txHash).filter((t): t is string => !!t)
+    );
+
+    // Only consider transactions that happened AFTER the order was created
+    // (with a small tolerance for clock skew). This is the key fix that prevents
+    // old incoming payments from auto-delivering new orders.
+    const sinceTimestamp = Math.floor(order.createdAt.getTime() / 1000);
+
     // Scan the blockchain for a matching payment
     const scan = await scanWalletForPayment(
       order.paymentMethod as any,
-      order.cryptoAmount
+      order.cryptoAmount,
+      sinceTimestamp,
+      usedTxHashes
     );
 
     if (!scan.verified) {

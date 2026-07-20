@@ -30,10 +30,24 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       });
     }
 
+    // Collect tx hashes already used by other paid orders
+    const usedOrders = await db.order.findMany({
+      where: { status: "paid", txHash: { not: null } },
+      select: { txHash: true },
+    });
+    const usedTxHashes = new Set(
+      usedOrders.map((o) => o.txHash).filter((t): t is string => !!t)
+    );
+
+    // Only consider transactions that happened AFTER the order was created
+    const sinceTimestamp = Math.floor(order.createdAt.getTime() / 1000);
+
     // Scan the blockchain for a matching payment
     const scan = await scanWalletForPayment(
       order.paymentMethod as any,
-      order.cryptoAmount
+      order.cryptoAmount,
+      sinceTimestamp,
+      usedTxHashes
     );
 
     if (!scan.verified) {
