@@ -114,6 +114,26 @@ export const useZev = create<ZevStore>((set, get) => ({
   },
   hydrateAuth: () => {
     if (typeof window === "undefined") return;
+
+    // Check for Google OAuth callback — token in URL hash
+    try {
+      const hash = window.location.hash;
+      if (hash.includes("google_token=")) {
+        const params = new URLSearchParams(hash.split("?")[1] || "");
+        const token = params.get("google_token");
+        const userStr = params.get("google_user");
+        if (token && userStr) {
+          const user = JSON.parse(decodeURIComponent(userStr));
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token }));
+          set({ admin: user, authToken: token, authLoading: false });
+          // Clean the URL — remove the token params
+          const cleanHash = hash.split("?")[0];
+          window.history.replaceState(null, "", window.location.pathname + cleanHash);
+          return;
+        }
+      }
+    } catch { /* ignore */ }
+
     try {
       const raw = localStorage.getItem(AUTH_STORAGE_KEY);
       if (raw) {

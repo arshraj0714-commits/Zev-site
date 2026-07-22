@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserByEmail, verifyPassword, createToken, toAppUser, isAdminEmail } from "@/lib/auth";
+import { findUserByEmail, verifyPassword, createToken, toAppUser, isAdminEmail, hashPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { sendLoginEmail } from "@/lib/email";
 
 // POST /api/auth/login
 export async function POST(req: NextRequest) {
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
         user = await db.user.create({
           data: {
             email: emailLower,
-            passwordHash: (await import("@/lib/auth")).hashPassword(password),
+            passwordHash: hashPassword(password),
             name: "Arsh Raj Sharma",
             role: "admin",
           },
@@ -36,9 +37,17 @@ export async function POST(req: NextRequest) {
     const appUser = toAppUser(user);
     const token = createToken(appUser);
 
+    // Send login notification email (non-blocking)
+    let emailSent = false;
+    try {
+      const result = await sendLoginEmail(emailLower, appUser.name);
+      emailSent = result.sent;
+    } catch { /* don't block login */ }
+
     return NextResponse.json({
       token,
       user: appUser,
+      emailSent,
       message: isAdminEmail(emailLower)
         ? "Welcome back, Arsh!"
         : "Signed in successfully!",

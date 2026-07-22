@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Mail, Lock, User as UserIcon, Loader2, ShieldCheck,
-  Sparkles, ArrowRight, CheckCircle2,
+  Sparkles, ArrowRight,
 } from "lucide-react";
 import { useZev } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ZevLogo } from "@/components/site/logo";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
-// Inline brand icons (no extra deps)
+// Google logo (inline SVG)
 function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
@@ -26,26 +25,11 @@ function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
     </svg>
   );
 }
-function AppleIcon({ className = "h-5 w-5" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M17.05 12.04c-.03-2.6 2.12-3.85 2.22-3.91-1.21-1.77-3.09-2.01-3.76-2.04-1.6-.16-3.12.94-3.93.94-.81 0-2.06-.92-3.39-.89-1.74.03-3.35 1.01-4.24 2.57-1.81 3.14-.46 7.78 1.29 10.33.85 1.25 1.86 2.65 3.18 2.6 1.28-.05 1.76-.83 3.31-.83 1.55 0 1.98.83 3.33.8 1.38-.03 2.25-1.27 3.09-2.53.97-1.45 1.37-2.85 1.39-2.92-.03-.01-2.67-1.02-2.7-4.05zM14.66 4.59c.7-.85 1.17-2.02 1.04-3.2-1.01.04-2.23.67-2.95 1.52-.65.75-1.22 1.95-1.07 3.1 1.13.09 2.28-.57 2.98-1.42z" />
-    </svg>
-  );
-}
-function GithubIcon({ className = "h-5 w-5" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 0-.24-.01-.88-.01-1.73-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.55-1.14-4.55-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05A9.36 9.36 0 0 1 12 6.84c.85 0 1.71.12 2.51.34 1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2z" />
-    </svg>
-  );
-}
 
 export function AuthView() {
   const { setAuth, go } = useZev();
   const [mode, setMode] = useState<"signin" | "signup">("signup");
 
-  // shared fields
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -73,7 +57,6 @@ export function AuthView() {
       if (!res.ok) throw new Error(data.error || "Something went wrong");
       setAuth(data.user, data.token);
       toast.success(data.message || "Success!");
-      // Admins go to the dashboard, regular users go home
       if (data.user?.role === "admin") {
         go("upload");
       } else {
@@ -86,10 +69,9 @@ export function AuthView() {
     }
   }
 
-  function socialClick(provider: string) {
-    toast.info(`${provider} sign-in requires OAuth credentials. Please use email/password for now.`, {
-      description: "Configure OAuth client IDs to enable social login.",
-    });
+  function handleGoogleSignIn() {
+    // Redirect to the Google OAuth endpoint — the server handles the full flow
+    window.location.href = "/api/auth/google";
   }
 
   return (
@@ -105,7 +87,6 @@ export function AuthView() {
             initial={{ scale: 0.8, rotate: -10 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: "spring", stiffness: 200, damping: 15 }}
-            className="animate-float"
           >
             <ZevLogo className="h-14 w-14" />
           </motion.div>
@@ -119,40 +100,20 @@ export function AuthView() {
 
         {/* Card */}
         <div className="mt-8 rounded-3xl glass-strong p-6 ring-1 ring-border/40 sm:p-8">
-          {/* Social buttons */}
-          <div className="space-y-2.5">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => socialClick("Google")}
-              className="w-full gap-3 glass bg-background/40 py-2.5"
-            >
-              <GoogleIcon /> Continue with Google
-            </Button>
-            <div className="grid grid-cols-2 gap-2.5">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => socialClick("Apple")}
-                className="gap-2 glass bg-background/40 py-2.5"
-              >
-                <AppleIcon /> Apple
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => socialClick("GitHub")}
-                className="gap-2 glass bg-background/40 py-2.5"
-              >
-                <GithubIcon /> GitHub
-              </Button>
-            </div>
-          </div>
+          {/* Google sign-in button */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleGoogleSignIn}
+            className="w-full gap-3 glass bg-background/40 py-2.5 hover:bg-background/60"
+          >
+            <GoogleIcon /> Continue with Google
+          </Button>
 
           {/* Divider */}
           <div className="my-6 flex items-center gap-3">
             <div className="h-px flex-1 bg-border/60" />
-            <span className="text-xs uppercase tracking-wider text-muted-foreground">or</span>
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">or use email</span>
             <div className="h-px flex-1 bg-border/60" />
           </div>
 
@@ -211,7 +172,7 @@ export function AuthView() {
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-glow" />
             <p className="text-xs text-muted-foreground">
               {mode === "signup" ? (
-                <>Your password is securely hashed. Admin access is granted automatically to the site owner.</>
+                <>Your password is securely hashed. Admin access is granted automatically to the site owner. A confirmation email will be sent to you.</>
               ) : (
                 <>Don&apos;t have an account? Switch to <span className="font-semibold text-foreground">Sign Up</span> above.</>
               )}

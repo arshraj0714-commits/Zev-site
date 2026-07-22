@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createUser, findUserByEmail, createToken, toAppUser, isAdminEmail } from "@/lib/auth";
+import { sendWelcomeEmail } from "@/lib/email";
 
 // POST /api/auth/signup
 export async function POST(req: NextRequest) {
@@ -24,11 +25,20 @@ export async function POST(req: NextRequest) {
     const user = await createUser(emailLower, password, name);
     const appUser = toAppUser(user);
     const token = createToken(appUser);
+    const admin = isAdminEmail(emailLower);
+
+    // Send welcome email (non-blocking — don't fail signup if email fails)
+    let emailSent = false;
+    try {
+      const result = await sendWelcomeEmail(emailLower, appUser.name, admin);
+      emailSent = result.sent;
+    } catch { /* don't block signup */ }
 
     return NextResponse.json({
       token,
       user: appUser,
-      message: isAdminEmail(emailLower)
+      emailSent,
+      message: admin
         ? "Welcome, Arsh! Admin access granted."
         : "Account created successfully!",
     }, { status: 201 });
