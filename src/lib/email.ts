@@ -6,13 +6,15 @@ import nodemailer, { type Transporter } from "nodemailer";
 let transporter: Transporter | null = null;
 
 // ============= METHOD DETECTION =============
+// SMTP is checked FIRST (can send to anyone via Mailtrap).
+// Resend is a fallback (free tier only sends to your own email).
 export function isEmailConfigured(): boolean {
-  return !!(process.env.RESEND_API_KEY || (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS));
+  return !!((process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) || process.env.RESEND_API_KEY);
 }
 
 export function getEmailMethod(): string {
-  if (process.env.RESEND_API_KEY) return "resend";
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return "smtp";
+  if (process.env.RESEND_API_KEY) return "resend";
   return "none";
 }
 
@@ -161,14 +163,14 @@ export async function sendEmail({ to, subject, text, html }: SendEmailParams): P
   const finalHtml = html || text.replace(/\n/g, "<br>");
   const method = getEmailMethod();
 
-  if (method === "resend") {
-    return sendViaResend(to, subject, text, finalHtml);
-  }
   if (method === "smtp") {
     return sendViaSmtp(to, subject, text, finalHtml);
   }
+  if (method === "resend") {
+    return sendViaResend(to, subject, text, finalHtml);
+  }
 
-  return { sent: false, error: "No email method configured. Set RESEND_API_KEY in .env (easiest, no 2FA). Get a free key at resend.com" };
+  return { sent: false, error: "No email method configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env (use Mailtrap — free, no phone, no CC)." };
 }
 
 // ============= BEAUTIFUL EMAIL SHELL =============
