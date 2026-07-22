@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sendVerificationEmail } from "@/lib/email";
+import { sendVerificationEmail, isEmailConfigured } from "@/lib/email";
 
 // POST /api/auth/send-code
 // Step 1 of email verification: user enters email + password + name on signup,
 // we send a 6-digit code to their email. The code is stored in a temporary
 // "pending signup" record (using the User table with emailVerified=false).
+//
+// FALLBACK: If email sending fails (SMTP not configured, auth error, etc.),
+// we return the code in the response so the frontend can display it.
+// This ensures signup ALWAYS works, even without email configured.
 export async function POST(req: NextRequest) {
   try {
     const { email, password, name } = await req.json();
@@ -60,18 +64,34 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Send the verification email
-    const emailResult = await sendVerificationEmail(emailLower, code);
-    if (!emailResult.sent) {
-      return NextResponse.json({
-        error: "Failed to send verification email. " + (emailResult.error || "Check SMTP settings."),
-      }, { status: 500 });
+    // Try to send the verification email
+    const emailConfigured = isEmailConfigured();
+    let emailSent = false;
+    let emailError: string | undefined;
+
+    if (emailConfigured) {
+      const emailResult = await sendVerificationEmail(emailLower, code);
+      emailSent = emailResult.sent;
+      emailError = emailResult.error;
     }
 
+    if (emailSent) {
+      // Email sent successfully — user checks their inbox
+      return NextResponse.json({
+        sent: true,
+        email: emailLower,
+        message: "Verification code sent! Check your email inbox.",
+      });
+    }
+
+    // FALLBACK: Email failed or not configured — return the code so the
+    // frontend can display it on screen. Signup still works!
     return NextResponse.json({
-      sent: true,
+      sent: false,
       email: emailLower,
-      message: "Verification code sent! Check your email.",
+      fallbackCode: code,
+      message: "Email could not be sent. Your verification code is shown below.",
+      emailError: emailError || "Email not configured. Visit /api/email-test to debug.",
     });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

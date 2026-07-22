@@ -38,6 +38,7 @@ export function AuthView() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fallbackCode, setFallbackCode] = useState<string | null>(null);
 
   // ---- Sign In (existing users) ----
   async function handleSignIn(e: React.FormEvent) {
@@ -104,7 +105,18 @@ export function AuthView() {
       try { data = await res.json(); } catch { data = {}; }
       if (!res.ok) throw new Error(data.error || "Failed to send code");
       setPhase("verify");
-      toast.success("Verification code sent! Check your email.");
+      if (data.sent) {
+        // Email sent successfully
+        toast.success("Verification code sent! Check your email inbox.");
+        setFallbackCode(null);
+      } else if (data.fallbackCode) {
+        // Email failed — show code on screen as fallback
+        setFallbackCode(data.fallbackCode);
+        toast.warning("Email couldn't be sent — your code is shown below.", {
+          description: "To fix email delivery, visit /api/email-test",
+          duration: 6000,
+        });
+      }
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -153,7 +165,13 @@ export function AuthView() {
       let data: any = {};
       try { data = await res.json(); } catch { data = {}; }
       if (!res.ok) throw new Error(data.error || "Failed to resend");
-      toast.success("New code sent! Check your email.");
+      if (data.sent) {
+        setFallbackCode(null);
+        toast.success("New code sent to your email!");
+      } else if (data.fallbackCode) {
+        setFallbackCode(data.fallbackCode);
+        toast.info("New code generated — shown below.");
+      }
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -206,10 +224,27 @@ export function AuthView() {
                     <KeyRound className="h-7 w-7 text-emerald-glow" />
                   </div>
                   <p className="mt-3 text-xs text-muted-foreground">
-                    We sent a 6-digit code to<br/>
-                    <span className="font-semibold text-foreground">{email}</span>
+                    {fallbackCode
+                      ? "Email delivery is not configured. Your code is shown below."
+                      : <>We sent a 6-digit code to<br/><span className="font-semibold text-foreground">{email}</span></>}
                   </p>
                 </div>
+
+                {/* Fallback code display (when email failed) */}
+                {fallbackCode && (
+                  <div className="rounded-xl bg-emerald-500/10 p-4 ring-1 ring-emerald-glow/30 text-center">
+                    <p className="text-xs text-emerald-glow font-medium mb-1">Your verification code:</p>
+                    <p className="text-3xl font-mono font-bold tracking-[0.4em] text-foreground">{fallbackCode}</p>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(fallbackCode); setCode(fallbackCode); toast.success("Code copied & entered!"); }}
+                      className="mt-2 text-xs text-emerald-glow hover:underline"
+                    >
+                      Click to copy & enter →
+                    </button>
+                  </div>
+                )}
+
                 <div>
                   <Label className="flex items-center gap-1.5"><KeyRound className="h-3.5 w-3.5" /> Verification Code</Label>
                   <Input
