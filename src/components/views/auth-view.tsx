@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Mail, Lock, User as UserIcon, Loader2, ShieldCheck,
-  Sparkles, ArrowRight,
+  Sparkles, ArrowRight, KeyRound, ArrowLeft,
 } from "lucide-react";
 import { useZev } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -26,16 +26,21 @@ function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
+type Phase = "form" | "verify";
+
 export function AuthView() {
   const { setAuth, go } = useZev();
   const [mode, setMode] = useState<"signin" | "signup">("signup");
+  const [phase, setPhase] = useState<Phase>("form");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  // ---- Sign In (existing users) ----
+  async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     if (!email || !password) {
       toast.error("Email and password are required");
@@ -43,25 +48,112 @@ export function AuthView() {
     }
     setLoading(true);
     try {
-      const endpoint = mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
-      const body = mode === "signup"
-        ? { email, password, name }
-        : { email, password };
-      const res = await fetch(endpoint, {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ email, password }),
       });
       let data: any = {};
       try { data = await res.json(); } catch { data = {}; }
-      if (!res.ok) throw new Error(data.error || "Something went wrong");
-      setAuth(data.user, data.token);
-      toast.success(data.message || "Success!");
-      if (data.user?.role === "admin") {
-        go("upload");
-      } else {
-        go("home");
+      if (!res.ok) {
+        // If needs verification, jump to verify phase
+        if (data.needsVerification) {
+          // Resend a code
+          await fetch("/api/auth/send-code", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password, name }),
+          });
+          setPhase("verify");
+          toast.info("Please verify your email. A new code has been sent.");
+        } else {
+          throw new Error(data.error || "Something went wrong");
+        }
+        return;
       }
+      setAuth(data.user, data.token);
+      toast.success(data.message || "Signed in!");
+      if (data.user?.role === "admin") go("upload");
+      else go("home");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ---- Sign Up Step 1: send verification code ----
+  async function handleSendCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email || !password) {
+      toast.error("Email and password are required");
+      return;
+    }
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name }),
+      });
+      let data: any = {};
+      try { data = await res.json(); } catch { data = {}; }
+      if (!res.ok) throw new Error(data.error || "Failed to send code");
+      setPhase("verify");
+      toast.success("Verification code sent! Check your email.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ---- Sign Up Step 2: verify code & create account ----
+  async function handleVerifyCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!code) {
+      toast.error("Enter the 6-digit verification code");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/verify-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code }),
+      });
+      let data: any = {};
+      try { data = await res.json(); } catch { data = {}; }
+      if (!res.ok) throw new Error(data.error || "Verification failed");
+      setAuth(data.user, data.token);
+      toast.success(data.message || "Email verified! Account created.");
+      if (data.user?.role === "admin") go("upload");
+      else go("home");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ---- Resend code ----
+  async function handleResendCode() {
+    if (!email || !password) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name }),
+      });
+      let data: any = {};
+      try { data = await res.json(); } catch { data = {}; }
+      if (!res.ok) throw new Error(data.error || "Failed to resend");
+      toast.success("New code sent! Check your email.");
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -70,7 +162,6 @@ export function AuthView() {
   }
 
   function handleGoogleSignIn() {
-    // Redirect to the Google OAuth endpoint — the server handles the full flow
     window.location.href = "/api/auth/google";
   }
 
@@ -91,102 +182,154 @@ export function AuthView() {
             <ZevLogo className="h-14 w-14" />
           </motion.div>
           <h1 className="mt-4 text-3xl font-bold">
-            <span className="text-gradient-mixed">Welcome to Zev</span>
+            <span className="text-gradient-mixed">
+              {phase === "verify" ? "Verify Your Email" : "Welcome to Zev"}
+            </span>
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {mode === "signup" ? "Create your account to get started" : "Sign in to your account"}
+            {phase === "verify"
+              ? `Enter the 6-digit code sent to ${email}`
+              : mode === "signup"
+              ? "Create your account to get started"
+              : "Sign in to your account"}
           </p>
         </div>
 
         {/* Card */}
         <div className="mt-8 rounded-3xl glass-strong p-6 ring-1 ring-border/40 sm:p-8">
-          {/* Google sign-in button */}
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleGoogleSignIn}
-            className="w-full gap-3 glass bg-background/40 py-2.5 hover:bg-background/60"
-          >
-            <GoogleIcon /> Continue with Google
-          </Button>
-
-          {/* Divider */}
-          <div className="my-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-border/60" />
-            <span className="text-xs uppercase tracking-wider text-muted-foreground">or use email</span>
-            <div className="h-px flex-1 bg-border/60" />
-          </div>
-
-          {/* Tabs */}
-          <Tabs value={mode} onValueChange={(v) => setMode(v as "signin" | "signup")}>
-            <TabsList className="grid w-full grid-cols-2 glass">
-              <TabsTrigger value="signup" className="gap-1.5">
-                <UserIcon className="h-3.5 w-3.5" /> Sign Up
-              </TabsTrigger>
-              <TabsTrigger value="signin" className="gap-1.5">
-                <Lock className="h-3.5 w-3.5" /> Sign In
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="signup" className="mt-5">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <Label className="flex items-center gap-1.5"><UserIcon className="h-3.5 w-3.5" /> Name</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} className="glass" placeholder="Your name" />
+          {/* ===== VERIFY PHASE ===== */}
+          {phase === "verify" ? (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+              <form onSubmit={handleVerifyCode} className="space-y-4">
+                <div className="flex flex-col items-center text-center py-2">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-gold/20 ring-1 ring-emerald-glow/30">
+                    <KeyRound className="h-7 w-7 text-emerald-glow" />
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    We sent a 6-digit code to<br/>
+                    <span className="font-semibold text-foreground">{email}</span>
+                  </p>
                 </div>
                 <div>
-                  <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</Label>
-                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="glass" placeholder="you@email.com" autoComplete="email" />
+                  <Label className="flex items-center gap-1.5"><KeyRound className="h-3.5 w-3.5" /> Verification Code</Label>
+                  <Input
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    className="glass text-center text-2xl font-mono tracking-[0.5em]"
+                    placeholder="000000"
+                    inputMode="numeric"
+                    maxLength={6}
+                    autoComplete="one-time-code"
+                  />
                 </div>
-                <div>
-                  <Label className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Password</Label>
-                  <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="glass" placeholder="At least 6 characters" autoComplete="new-password" />
-                </div>
-                <Button type="submit" disabled={loading} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950 hover:from-emerald-400 hover:to-emerald-300">
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  {loading ? "Creating account..." : "Create Account"}
+                <Button type="submit" disabled={loading || code.length !== 6} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950 hover:from-emerald-400 hover:to-emerald-300">
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                  {loading ? "Verifying..." : "Verify & Create Account"}
                 </Button>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="signin" className="mt-5">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</Label>
-                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="glass" placeholder="you@email.com" autoComplete="email" />
+                <div className="flex items-center justify-between text-xs">
+                  <button type="button" onClick={() => setPhase("form")} className="flex items-center gap-1 text-muted-foreground hover:text-foreground">
+                    <ArrowLeft className="h-3 w-3" /> Back
+                  </button>
+                  <button type="button" onClick={handleResendCode} disabled={loading} className="text-emerald-glow hover:underline">
+                    Resend code
+                  </button>
                 </div>
-                <div>
-                  <Label className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Password</Label>
-                  <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="glass" placeholder="••••••••" autoComplete="current-password" />
-                </div>
-                <Button type="submit" disabled={loading} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950 hover:from-emerald-400 hover:to-emerald-300">
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                  {loading ? "Signing in..." : "Sign In"}
-                </Button>
               </form>
-            </TabsContent>
-          </Tabs>
+            </motion.div>
+          ) : (
+            /* ===== FORM PHASE ===== */
+            <>
+              {/* Google sign-in button */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleGoogleSignIn}
+                className="w-full gap-3 glass bg-background/40 py-2.5 hover:bg-background/60"
+              >
+                <GoogleIcon /> Continue with Google
+              </Button>
 
-          {/* Info note */}
-          <div className="mt-5 flex items-start gap-2 rounded-xl bg-emerald-500/10 p-3 ring-1 ring-emerald-glow/20">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-glow" />
-            <p className="text-xs text-muted-foreground">
-              {mode === "signup" ? (
-                <>Your password is securely hashed. Admin access is granted automatically to the site owner. A confirmation email will be sent to you.</>
-              ) : (
-                <>Don&apos;t have an account? Switch to <span className="font-semibold text-foreground">Sign Up</span> above.</>
-              )}
-            </p>
-          </div>
+              {/* Divider */}
+              <div className="my-6 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border/60" />
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">or use email</span>
+                <div className="h-px flex-1 bg-border/60" />
+              </div>
+
+              {/* Tabs */}
+              <Tabs value={mode} onValueChange={(v) => setMode(v as "signin" | "signup")}>
+                <TabsList className="grid w-full grid-cols-2 glass">
+                  <TabsTrigger value="signup" className="gap-1.5">
+                    <UserIcon className="h-3.5 w-3.5" /> Sign Up
+                  </TabsTrigger>
+                  <TabsTrigger value="signin" className="gap-1.5">
+                    <Lock className="h-3.5 w-3.5" /> Sign In
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="signup" className="mt-5">
+                  <form onSubmit={handleSendCode} className="space-y-4">
+                    <div>
+                      <Label className="flex items-center gap-1.5"><UserIcon className="h-3.5 w-3.5" /> Name</Label>
+                      <Input value={name} onChange={(e) => setName(e.target.value)} className="glass" placeholder="Your name" />
+                    </div>
+                    <div>
+                      <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</Label>
+                      <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="glass" placeholder="you@email.com" autoComplete="email" />
+                    </div>
+                    <div>
+                      <Label className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Password</Label>
+                      <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="glass" placeholder="At least 6 characters" autoComplete="new-password" />
+                    </div>
+                    <Button type="submit" disabled={loading} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950 hover:from-emerald-400 hover:to-emerald-300">
+                      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                      {loading ? "Sending code..." : "Send Verification Code"}
+                    </Button>
+                  </form>
+                </TabsContent>
+
+                <TabsContent value="signin" className="mt-5">
+                  <form onSubmit={handleSignIn} className="space-y-4">
+                    <div>
+                      <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</Label>
+                      <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="glass" placeholder="you@email.com" autoComplete="email" />
+                    </div>
+                    <div>
+                      <Label className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Password</Label>
+                      <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="glass" placeholder="••••••••" autoComplete="current-password" />
+                    </div>
+                    <Button type="submit" disabled={loading} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950 hover:from-emerald-400 hover:to-emerald-300">
+                      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                      {loading ? "Signing in..." : "Sign In"}
+                    </Button>
+                  </form>
+                </TabsContent>
+              </Tabs>
+
+              {/* Info note */}
+              <div className="mt-5 flex items-start gap-2 rounded-xl bg-emerald-500/10 p-3 ring-1 ring-emerald-glow/20">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-glow" />
+                <p className="text-xs text-muted-foreground">
+                  {mode === "signup" ? (
+                    <>We&apos;ll send a 6-digit verification code to your email. Enter it to complete signup. Your password is securely hashed.</>
+                  ) : (
+                    <>Don&apos;t have an account? Switch to <span className="font-semibold text-foreground">Sign Up</span> above.</>
+                  )}
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Back home */}
-        <button
-          onClick={() => go("home")}
-          className="mt-6 flex w-full items-center justify-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          ← Back to home
-        </button>
+        {phase === "form" && (
+          <button
+            onClick={() => go("home")}
+            className="mt-6 flex w-full items-center justify-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            ← Back to home
+          </button>
+        )}
       </motion.div>
     </div>
   );

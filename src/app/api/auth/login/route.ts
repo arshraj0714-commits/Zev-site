@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
             passwordHash: hashPassword(password),
             name: "Arsh Raj Sharma",
             role: "admin",
+            emailVerified: true,
           },
         });
       }
@@ -32,6 +33,15 @@ export async function POST(req: NextRequest) {
 
     if (!user || !verifyPassword(password, user.passwordHash)) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    }
+
+    // Check if email is verified (skip for admin / Google OAuth users)
+    if (!user.emailVerified && !isAdminEmail(emailLower)) {
+      return NextResponse.json({
+        error: "Please verify your email first. Check your inbox for the verification code.",
+        needsVerification: true,
+        email: emailLower,
+      }, { status: 403 });
     }
 
     const appUser = toAppUser(user);

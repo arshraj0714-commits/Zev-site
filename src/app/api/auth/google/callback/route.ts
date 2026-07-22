@@ -88,6 +88,7 @@ export async function GET(req: NextRequest) {
 
   if (!user) {
     // Create a new account — Google users get a random password (they auth via Google)
+    // Google already verified their email, so we mark emailVerified=true
     const randomPass = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
     const role = isAdminEmail(emailLower) ? "admin" : "user";
     user = await db.user.create({
@@ -96,6 +97,7 @@ export async function GET(req: NextRequest) {
         passwordHash: hashPassword(randomPass),
         name: googleUser.name,
         role,
+        emailVerified: true,
       },
     });
     isNewUser = true;

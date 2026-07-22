@@ -104,6 +104,9 @@ model User {
   passwordHash String
   name         String?
   role         String   @default("user") // "user" | "admin"
+  emailVerified Boolean @default(false)
+  verifyToken  String?  // 6-digit code sent to email
+  verifyExpiry DateTime? // when the code expires
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
