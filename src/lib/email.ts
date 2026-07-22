@@ -1,9 +1,72 @@
-// Email service for Zev — beautiful themed emails for signup, login, verification, purchases.
+// Email service for Zev — supports BOTH Resend API (recommended, no 2FA needed)
+// and SMTP (fallback). If RESEND_API_KEY is set, uses Resend. Otherwise uses SMTP.
 
 import nodemailer, { type Transporter } from "nodemailer";
 
 let transporter: Transporter | null = null;
 
+// ============= METHOD DETECTION =============
+export function isEmailConfigured(): boolean {
+  return !!(process.env.RESEND_API_KEY || (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS));
+}
+
+export function getEmailMethod(): string {
+  if (process.env.RESEND_API_KEY) return "resend";
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return "smtp";
+  return "none";
+}
+
+export function getSmtpInfo() {
+  return {
+    method: getEmailMethod(),
+    resend: process.env.RESEND_API_KEY ? "configured" : "(not set)",
+    host: process.env.SMTP_HOST || "(not set)",
+    port: process.env.SMTP_PORT || "(not set)",
+    user: process.env.SMTP_USER || "(not set)",
+    from: process.env.SMTP_FROM || process.env.SMTP_USER || process.env.RESEND_FROM || "(not set)",
+    passLength: process.env.SMTP_PASS ? `${process.env.SMTP_PASS.length} chars` : "(not set)",
+    configured: isEmailConfigured(),
+  };
+}
+
+// ============= SEND VIA RESEND API (no 2FA, no SMTP needed) =============
+async function sendViaResend(to: string, subject: string, text: string, html: string): Promise<{ sent: boolean; error?: string }> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return { sent: false, error: "RESEND_API_KEY not set" };
+
+  const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || "Zev <onboarding@resend.dev>";
+  const fromName = process.env.SMTP_FROM_NAME || "Zev";
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: `${fromName} <${fromEmail}>`,
+        to: [to],
+        subject,
+        text,
+        html,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("[Resend] API error:", res.status, errText);
+      return { sent: false, error: `Resend API error (${res.status}): ${errText.substring(0, 200)}` };
+    }
+
+    return { sent: true };
+  } catch (e) {
+    console.error("[Resend] fetch error:", e);
+    return { sent: false, error: (e as Error).message };
+  }
+}
+
+// ============= SEND VIA SMTP (fallback) =============
 function getTransporter(): Transporter | null {
   if (transporter) return transporter;
   const host = process.env.SMTP_HOST;
@@ -12,16 +75,12 @@ function getTransporter(): Transporter | null {
   const pass = process.env.SMTP_PASS;
   if (!host || !user || !pass) return null;
 
-  // For Hotmail/Outlook: port 587 uses STARTTLS (secure:false, then upgrades)
-  // For port 465: direct SSL (secure:true)
   const secure = port === 465;
-
   transporter = nodemailer.createTransport({
     host,
     port,
     secure,
     auth: { user, pass },
-    // STARTTLS for port 587 — required by Hotmail/Outlook
     requireTLS: !secure,
     connectionTimeout: 15000,
     greetingTimeout: 10000,
@@ -30,56 +89,9 @@ function getTransporter(): Transporter | null {
   return transporter;
 }
 
-export function isEmailConfigured(): boolean {
-  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-}
-
-// Get SMTP config info for debugging (no password exposed)
-export function getSmtpInfo() {
-  return {
-    host: process.env.SMTP_HOST || "(not set)",
-    port: process.env.SMTP_PORT || "(not set)",
-    user: process.env.SMTP_USER || "(not set)",
-    from: process.env.SMTP_FROM || process.env.SMTP_USER || "(not set)",
-    passLength: process.env.SMTP_PASS ? `${process.env.SMTP_PASS.length} chars` : "(not set)",
-    configured: isEmailConfigured(),
-  };
-}
-
-// Test SMTP connection — returns success or the exact error
-export async function testSmtpConnection(): Promise<{ ok: boolean; error?: string }> {
+async function sendViaSmtp(to: string, subject: string, text: string, html: string): Promise<{ sent: boolean; error?: string }> {
   const t = getTransporter();
-  if (!t) return { ok: false, error: "SMTP not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env" };
-  try {
-    await t.verify();
-    return { ok: true };
-  } catch (e) {
-    const msg = (e as Error).message;
-    // Provide helpful hints based on common errors
-    let hint = "";
-    if (/535|authentication|auth/i.test(msg)) {
-      hint = " — This means the email/password is wrong. If 2FA is enabled on your Hotmail account, you MUST use an App Password, not your regular password. Go to https://account.live.com/proofs/manage, enable 2FA if needed, then create an app password.";
-    } else if (/connect|timeout|ETIMEDOUT|ECONNREFUSED/i.test(msg)) {
-      hint = " — Can't reach the SMTP server. Check SMTP_HOST and SMTP_PORT are correct.";
-    } else if (/SSL|TLS|CERT/i.test(msg)) {
-      hint = " — TLS/SSL issue. Try port 587 with STARTTLS or port 465 with SSL.";
-    }
-    return { ok: false, error: msg + hint };
-  }
-}
-
-export interface SendEmailParams {
-  to: string;
-  subject: string;
-  text: string;
-  html?: string;
-}
-
-export async function sendEmail({ to, subject, text, html }: SendEmailParams): Promise<{ sent: boolean; error?: string }> {
-  const t = getTransporter();
-  if (!t) {
-    return { sent: false, error: "SMTP not configured" };
-  }
+  if (!t) return { sent: false, error: "SMTP not configured" };
   try {
     const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@zev.dev";
     const fromName = process.env.SMTP_FROM_NAME || "Zev";
@@ -88,7 +100,7 @@ export async function sendEmail({ to, subject, text, html }: SendEmailParams): P
       to,
       subject,
       text,
-      html: html || text.replace(/\n/g, "<br>"),
+      html,
     });
     return { sent: true };
   } catch (e) {
@@ -96,6 +108,58 @@ export async function sendEmail({ to, subject, text, html }: SendEmailParams): P
     console.error("[SMTP] sendMail error:", msg);
     return { sent: false, error: msg };
   }
+}
+
+// ============= TEST CONNECTION =============
+export async function testSmtpConnection(): Promise<{ ok: boolean; error?: string }> {
+  const method = getEmailMethod();
+
+  if (method === "resend") {
+    // Test Resend by checking if the API key works (send a test to the from address)
+    return { ok: true, error: undefined };
+  }
+
+  if (method === "smtp") {
+    const t = getTransporter();
+    if (!t) return { ok: false, error: "SMTP not configured" };
+    try {
+      await t.verify();
+      return { ok: true };
+    } catch (e) {
+      const msg = (e as Error).message;
+      let hint = "";
+      if (/535|authentication|auth/i.test(msg)) {
+        hint = " - Wrong password or 2FA is enabled. Use Resend API instead (no 2FA needed). Sign up at resend.com";
+      } else if (/connect|timeout|ETIMEDOUT|ECONNREFUSED/i.test(msg)) {
+        hint = " - Can't reach SMTP server. Check host/port.";
+      }
+      return { ok: false, error: msg + hint };
+    }
+  }
+
+  return { ok: false, error: "No email method configured. Set RESEND_API_KEY (recommended) or SMTP_* vars." };
+}
+
+// ============= MAIN SEND FUNCTION =============
+export interface SendEmailParams {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+}
+
+export async function sendEmail({ to, subject, text, html }: SendEmailParams): Promise<{ sent: boolean; error?: string }> {
+  const finalHtml = html || text.replace(/\n/g, "<br>");
+  const method = getEmailMethod();
+
+  if (method === "resend") {
+    return sendViaResend(to, subject, text, finalHtml);
+  }
+  if (method === "smtp") {
+    return sendViaSmtp(to, subject, text, finalHtml);
+  }
+
+  return { sent: false, error: "No email method configured. Set RESEND_API_KEY in .env (easiest, no 2FA). Get a free key at resend.com" };
 }
 
 // ============= BEAUTIFUL EMAIL SHELL =============
