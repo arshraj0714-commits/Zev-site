@@ -19,12 +19,11 @@ export function getEmailMethod(): string {
 export function getSmtpInfo() {
   return {
     method: getEmailMethod(),
-    resend: process.env.RESEND_API_KEY ? "configured" : "(not set)",
+    resend: process.env.RESEND_API_KEY ? "configured (sends from onboarding@resend.dev)" : "(not set)",
     host: process.env.SMTP_HOST || "(not set)",
     port: process.env.SMTP_PORT || "(not set)",
     user: process.env.SMTP_USER || "(not set)",
-    from: process.env.SMTP_FROM || process.env.SMTP_USER || process.env.RESEND_FROM || "(not set)",
-    passLength: process.env.SMTP_PASS ? `${process.env.SMTP_PASS.length} chars` : "(not set)",
+    from: "onboarding@resend.dev (Resend free tier)",
     configured: isEmailConfigured(),
   };
 }
@@ -34,8 +33,12 @@ async function sendViaResend(to: string, subject: string, text: string, html: st
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { sent: false, error: "RESEND_API_KEY not set" };
 
-  const fromEmail = process.env.RESEND_FROM || process.env.SMTP_FROM || "Zev <onboarding@resend.dev>";
+  // On Resend free tier, you can ONLY send from "onboarding@resend.dev"
+  // (unless you verify your own domain at https://resend.com/domains).
+  // So we always use onboarding@resend.dev as the from address.
+  // The "from name" is still "Zev" so recipients see "Zev <onboarding@resend.dev>".
   const fromName = process.env.SMTP_FROM_NAME || "Zev";
+  const fromEmail = "onboarding@resend.dev";
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -56,7 +59,13 @@ async function sendViaResend(to: string, subject: string, text: string, html: st
     if (!res.ok) {
       const errText = await res.text();
       console.error("[Resend] API error:", res.status, errText);
-      return { sent: false, error: `Resend API error (${res.status}): ${errText.substring(0, 200)}` };
+      // Parse the error for a cleaner message
+      let cleanError = errText;
+      try {
+        const errJson = JSON.parse(errText);
+        cleanError = errJson.message || errText;
+      } catch {}
+      return { sent: false, error: `Resend: ${cleanError.substring(0, 150)}` };
     }
 
     return { sent: true };
