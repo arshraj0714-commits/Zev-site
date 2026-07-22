@@ -73,25 +73,30 @@ export async function POST(req: NextRequest) {
       const emailResult = await sendVerificationEmail(emailLower, code);
       emailSent = emailResult.sent;
       emailError = emailResult.error;
+      console.log("[send-code] Email result:", { sent: emailSent, error: emailError, to: emailLower });
+    } else {
+      console.log("[send-code] Email not configured — using fallback");
     }
 
     if (emailSent) {
       // Email sent successfully — user checks their inbox
+      // Also tell them to check spam folder
       return NextResponse.json({
         sent: true,
         email: emailLower,
-        message: "Verification code sent! Check your email inbox.",
+        message: "Verification code sent! Check your email inbox (and spam/junk folder).",
       });
     }
 
     // FALLBACK: Email failed or not configured — return the code so the
     // frontend can display it on screen. Signup still works!
+    console.log("[send-code] Email failed — returning fallback code:", code);
     return NextResponse.json({
       sent: false,
       email: emailLower,
       fallbackCode: code,
       message: "Email could not be sent. Your verification code is shown below.",
-      emailError: emailError || "Email not configured. Visit /api/email-test to debug.",
+      emailError: emailError || "Email not configured.",
     });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

@@ -100,24 +100,46 @@ function getTransporter(): Transporter | null {
   return transporter;
 }
 
-async function sendViaSmtp(to: string, subject: string, text: string, html: string): Promise<{ sent: boolean; error?: string }> {
+async function sendViaSmtp(to: string, subject: string, text: string, html: string): Promise<{ sent: boolean; error?: string; messageId?: string }> {
   const t = getTransporter();
   if (!t) return { sent: false, error: "SMTP not configured" };
   try {
     const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@zev.dev";
     const fromName = process.env.SMTP_FROM_NAME || "Zev";
-    await t.sendMail({
+    console.log("[SMTP] Sending email:", { from: fromEmail, to, subject: subject.substring(0, 50) });
+    
+    const info = await t.sendMail({
       from: `"${fromName}" <${fromEmail}>`,
       to,
       subject,
       text,
       html,
     });
-    return { sent: true };
+    
+    console.log("[SMTP] Email sent successfully:", {
+      messageId: info.messageId,
+      response: info.response,
+      accepted: info.accepted,
+      rejected: info.rejected,
+      pending: info.pending,
+    });
+    
+    // Check if the recipient was rejected
+    if (info.rejected && info.rejected.length > 0) {
+      return { sent: false, error: `Email rejected by server. Rejected: ${info.rejected.join(", ")}` };
+    }
+    
+    return { sent: true, messageId: info.messageId };
   } catch (e) {
     const msg = (e as Error).message;
     console.error("[SMTP] sendMail error:", msg);
-    return { sent: false, error: msg };
+    let hint = "";
+    if (/535|authentication|auth/i.test(msg)) {
+      hint = " — Wrong password OR SMTP auth is disabled. For Hotmail: go to https://account.microsoft.com/security → Advanced security options → enable 'Authenticated SMTP'.";
+    } else if (/connect|timeout|ETIMEDOUT|ECONNREFUSED/i.test(msg)) {
+      hint = " — Can't reach SMTP server. Check SMTP_HOST and SMTP_PORT.";
+    }
+    return { sent: false, error: msg + hint };
   }
 }
 
