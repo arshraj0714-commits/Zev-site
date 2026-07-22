@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Package, Boxes, Code2, X, Plus,
-  CheckCircle2, Loader2, Trash2, ShieldCheck, Lock, LogOut, Pencil, FileArchive,
+  CheckCircle2, Loader2, Trash2, ShieldCheck, Lock, LogOut, Pencil, FileArchive, Upload, FileText,
 } from "lucide-react";
 import { SectionHeading } from "@/components/site/section-heading";
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { ImageUpload } from "@/components/site/image-upload";
-import { ZipUpload, type ZipFileValue } from "@/components/site/zip-upload";
-import { EditProductModal } from "@/components/site/edit-product-modal";
+import { ImageUpload } from "@/components/views/image-upload";
+import { ZipUpload, type ZipFileValue } from "@/components/views/zip-upload";
+import { EditProductModal } from "@/components/views/edit-product-modal";
+import { EditStockModal, EditOpenSourceModal } from "@/components/views/edit-stock-opensource-modals";
 import { useZev } from "@/lib/store";
-import { useProducts, useStock, useOpenSource, useOrders, type Product } from "@/hooks/use-data";
+import { useProducts, useStock, useOpenSource, useOrders, type Product, type StockItem, type OpenSourceItem } from "@/hooks/use-data";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -105,8 +106,10 @@ export function UploadView() {
   const { data: osData } = useOpenSource();
   const { data: ordersData } = useOrders();
 
-  // Edit modal
+  // Edit modals
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingStock, setEditingStock] = useState<StockItem | null>(null);
+  const [editingOS, setEditingOS] = useState<OpenSourceItem | null>(null);
 
   async function saveProduct() {
     if (!pName || !pDesc) { toast.error("Name and description required"); return; }
@@ -159,6 +162,32 @@ export function UploadView() {
       qc.invalidateQueries({ queryKey: ["stock"] });
     } catch (e) { toast.error((e as Error).message || "Failed to add stock"); }
     finally { setSavingS(false); }
+  }
+
+  // Handle .txt file upload for new stock — parse credentials separated by newlines or commas
+  function handleCredFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = reader.result as string;
+      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      const parsed: { label: string; value: string }[] = [];
+      for (const line of lines) {
+        const parts = line.split(",").map((p) => p.trim()).filter(Boolean);
+        for (const part of parts) {
+          parsed.push({ label: `Item ${parsed.length + 1}`, value: part });
+        }
+      }
+      if (parsed.length > 0) {
+        setCreds(parsed);
+        toast.success(`Loaded ${parsed.length} credentials from file`);
+      } else {
+        toast.error("No credentials found in file");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   }
 
   async function saveOS() {
@@ -375,9 +404,15 @@ export function UploadView() {
               <div>
                 <div className="flex items-center justify-between">
                   <Label>Credentials (revealed after purchase)</Label>
-                  <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => setCreds([...creds, { label: "", value: "" }])}>
-                    <Plus className="h-3 w-3" /> Add
-                  </Button>
+                  <div className="flex gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs text-emerald-glow ring-1 ring-emerald-glow/30 hover:bg-emerald-glow/10">
+                      <Upload className="h-3 w-3" /> Upload .txt
+                      <input type="file" accept=".txt,text/plain" onChange={handleCredFileUpload} className="hidden" />
+                    </label>
+                    <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => setCreds([...creds, { label: "", value: "" }])}>
+                      <Plus className="h-3 w-3" /> Add
+                    </Button>
+                  </div>
                 </div>
                 <div className="mt-2 max-h-52 space-y-2 overflow-y-auto pr-1">
                   {creds.map((c, i) => (
@@ -390,7 +425,9 @@ export function UploadView() {
                     </div>
                   ))}
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">These are stored securely and only shown to buyers after payment confirms.</p>
+                <p className="mt-2 flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <FileText className="h-3 w-3" /> Upload a .txt file — each line or comma-separated value becomes a credential. Or add manually.
+                </p>
               </div>
               <Button onClick={saveStock} disabled={savingS} className="w-full gap-2 bg-gradient-to-r from-gold to-amber-400 text-black">
                 {savingS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add Stock Item
@@ -402,16 +439,32 @@ export function UploadView() {
             <h4 className="mb-3 font-semibold">Existing Stock ({stockData?.items.length ?? 0})</h4>
             <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
               {(stockData?.items ?? []).map((s) => (
-                <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setEditingStock(s)}
+                  className="group flex w-full items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-left text-sm transition-colors hover:bg-accent/40 hover:ring-1 hover:ring-gold/30"
+                >
                   <div className="flex items-center gap-2 min-w-0">
                     <Badge variant="secondary" className="glass">{s.category}</Badge>
                     <span className="truncate font-medium">{s.name}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">${s.price} · {s.quantity - s.soldCount} left</span>
-                    <button onClick={() => deleteStock(s.id)} className="text-muted-foreground hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <span className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); deleteStock(s.id); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); deleteStock(s.id); } }}
+                      className="text-muted-foreground hover:text-rose-400"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -448,13 +501,31 @@ export function UploadView() {
             <h4 className="mb-3 font-semibold">Existing Open Source ({osData?.items.length ?? 0})</h4>
             <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
               {(osData?.items ?? []).map((o) => (
-                <div key={o.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => setEditingOS(o)}
+                  className="group flex w-full items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-left text-sm transition-colors hover:bg-accent/40 hover:ring-1 hover:ring-emerald-glow/30"
+                >
                   <div className="flex items-center gap-2 min-w-0">
                     <Badge variant="secondary" className="glass">{o.category}</Badge>
                     <span className="truncate font-medium">{o.name}</span>
                   </div>
-                  <button onClick={() => deleteOS(o.id)} className="text-muted-foreground hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
-                </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); deleteOS(o.id); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); deleteOS(o.id); } }}
+                      className="text-muted-foreground hover:text-rose-400"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                </button>
               ))}
             </div>
           </div>
@@ -485,6 +556,16 @@ export function UploadView() {
         product={editingProduct}
         open={!!editingProduct}
         onOpenChange={(o) => { if (!o) setEditingProduct(null); }}
+      />
+      <EditStockModal
+        item={editingStock}
+        open={!!editingStock}
+        onOpenChange={(o) => { if (!o) setEditingStock(null); }}
+      />
+      <EditOpenSourceModal
+        item={editingOS}
+        open={!!editingOS}
+        onOpenChange={(o) => { if (!o) setEditingOS(null); }}
       />
     </div>
   );

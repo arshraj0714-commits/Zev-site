@@ -1,20 +1,31 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-// POST /api/seed — populate sample data (idempotent-ish: clears existing first)
+// POST /api/seed — populate sample data ONLY if the database is empty.
+// NEVER deletes existing products/stock/orders. Safe to run anytime.
 export async function POST() {
   try {
-    await db.order.deleteMany();
-    await db.product.deleteMany();
-    await db.stockItem.deleteMany();
-    await db.openSource.deleteMany();
-    await db.siteStats.deleteMany();
+    const productCount = await db.product.count();
+    const stockCount = await db.stockItem.count();
+    const osCount = await db.openSource.count();
 
-    await db.siteStats.create({
-      data: { id: "singleton", vouches: 1000, productsSold: 1573 },
+    // Only seed if the database is completely empty
+    if (productCount > 0 || stockCount > 0 || osCount > 0) {
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        message: "Database already has data. Seeding skipped to preserve existing products.",
+        counts: { products: productCount, stock: stockCount, opensource: osCount },
+      });
+    }
+
+    // Ensure stats exist
+    await db.siteStats.upsert({
+      where: { id: "singleton" },
+      update: {},
+      create: { id: "singleton", vouches: 1000, productsSold: 1573 },
     });
 
-    // Products (paid + free tools/bots)
     await db.product.createMany({
       data: [
         {
@@ -88,7 +99,6 @@ export async function POST() {
       ],
     });
 
-    // Stock / credentials
     await db.stockItem.createMany({
       data: [
         {
@@ -104,7 +114,6 @@ export async function POST() {
             { label: "Email 3", value: "user3@example.com : Pass789!" },
             { label: "Email 4", value: "user4@example.com : PassAbc!" },
             { label: "Email 5", value: "user5@example.com : PassXyz!" },
-            { label: "Recovery Note", value: "All accounts have recovery email set to recover@zev.dev" },
           ]),
           tags: "email,accounts,verified",
         },
@@ -118,7 +127,6 @@ export async function POST() {
           credentials: JSON.stringify([
             { label: "Token", value: "ODAxMjM0NTY3ODkw.YfGhIj.kxJ9_sample_token_here_abc123" },
             { label: "Email", value: "discord.acc@protonmail.com : DiscordPass2024!" },
-            { label: "Note", value: "Enable 2FA after login for security." },
           ]),
           tags: "discord,token,nitro,account",
         },
@@ -146,14 +154,12 @@ export async function POST() {
             { label: "Account 1", value: "stream1@zev.dev : Stream1Pass!" },
             { label: "Account 2", value: "stream2@zev.dev : Stream2Pass!" },
             { label: "Account 3", value: "stream3@zev.dev : Stream3Pass!" },
-            { label: "Note", value: "7 more accounts included in delivery." },
           ]),
           tags: "streaming,accounts,bundle",
         },
       ],
     });
 
-    // Open source free codes
     await db.openSource.createMany({
       data: [
         {

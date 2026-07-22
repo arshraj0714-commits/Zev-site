@@ -29,6 +29,7 @@ export interface StockItem {
   quantity: number;
   soldCount: number;
   tags?: string | null;
+  credentials?: string | null;
   createdAt: string;
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ShoppingCart, Tag, Folder, Download, Coins, Star } from "lucide-react";
+import { ShoppingCart, Folder, Download, Coins, Star } from "lucide-react";
 import { TiltCard } from "./tilt-card";
 import { ItemImage } from "./item-image";
 import { Button } from "@/components/ui/button";
@@ -157,13 +157,6 @@ export function MarketplaceCard({ item, index = 0 }: { item: CardItem; index?: n
                   className="flex-1 gap-2 bg-gradient-to-r from-gold to-amber-400 text-black hover:from-amber-400 hover:to-gold shadow-lg shadow-gold/20"
                 >
                   <ShoppingCart className="h-4 w-4" /> Buy Now
-                </Button>
-              )}
-              {item.codeLink && item.kind !== "opensource" && !isFree && (
-                <Button variant="outline" size="icon" asChild className="glass">
-                  <a href={item.codeLink} target="_blank" rel="noopener noreferrer" aria-label="Preview">
-                    <Tag className="h-4 w-4" />
-                  </a>
                 </Button>
               )}
             </div>
