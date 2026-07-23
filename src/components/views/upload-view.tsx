@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Package, Boxes, Code2, X, Plus,
-  CheckCircle2, Loader2, Trash2, ShieldCheck, Lock, LogOut, Pencil, FileArchive, Upload, FileText, Gift,
+  CheckCircle2, Loader2, Trash2, ShieldCheck, Lock, LogOut, Pencil, FileArchive, Upload, FileText, Gift, Save,
 } from "lucide-react";
 import { SectionHeading } from "@/components/site/section-heading";
 import { Button } from "@/components/ui/button";
@@ -585,6 +585,7 @@ function RedeemCodesSection() {
   const [newMax, setNewMax] = useState("1");
   const [newExpiry, setNewExpiry] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editingCode, setEditingCode] = useState<any | null>(null);
 
   const { data } = useQuery({
     queryKey: ["admin-redeem-codes"],
@@ -648,6 +649,44 @@ function RedeemCodesSection() {
     }
   }
 
+  function handleEditCode(c: any) {
+    setEditingCode(c);
+  }
+
+  async function handleSaveEditCode(updated: any) {
+    const token = JSON.parse(localStorage.getItem("zev-auth") || "{}").token;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/redeem/create?id=${updated.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          code: updated.code,
+          description: updated.description,
+          rewardType: updated.rewardType || (updated.discountPct ? "discount" : "link"),
+          rewardName: updated.rewardName,
+          rewardLink: updated.rewardLink,
+          discountPct: updated.discountPct,
+          maxUses: updated.maxUses,
+          expiresAt: updated.expiresAt,
+          active: updated.active,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed");
+      }
+      toast.success("Code updated!");
+      setEditingCode(null);
+      qc.invalidateQueries({ queryKey: ["admin-redeem-codes"] });
+      qc.invalidateQueries({ queryKey: ["redeem-codes"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="mt-8 rounded-2xl glass p-5 ring-1 ring-border/40">
       <h4 className="mb-3 font-semibold flex items-center gap-2">
@@ -698,8 +737,8 @@ function RedeemCodesSection() {
       {/* Existing codes */}
       <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
         {codes.map((c: any) => (
-          <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
-            <div className="min-w-0 flex-1">
+          <div key={c.id} className="group flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm transition-colors hover:bg-accent/40 hover:ring-1 hover:ring-gold/30">
+            <div className="min-w-0 flex-1 cursor-pointer" onClick={() => handleEditCode(c)}>
               <div className="flex items-center gap-2">
                 <code className="font-mono font-bold text-gold">{c.code}</code>
                 <span className="text-xs text-foreground truncate">{c.rewardName}</span>
@@ -714,12 +753,88 @@ function RedeemCodesSection() {
                 {c.expiresAt && ` · exp ${new Date(c.expiresAt).toLocaleDateString()}`}
               </div>
             </div>
-            <button onClick={() => deleteCode(c.id)} className="text-muted-foreground hover:text-rose-400 shrink-0">
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => handleEditCode(c)} className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-gold">
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button onClick={() => deleteCode(c.id)} className="text-muted-foreground hover:text-rose-400">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         ))}
         {codes.length === 0 && <p className="text-sm text-muted-foreground">No codes yet.</p>}
+      </div>
+
+      {/* Edit modal */}
+      {editingCode && (
+        <EditRedeemCodeModal
+          code={editingCode}
+          saving={saving}
+          onSave={handleSaveEditCode}
+          onClose={() => setEditingCode(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------- Edit Redeem Code Modal ----------
+function EditRedeemCodeModal({ code, saving, onSave, onClose }: {
+  code: any;
+  saving: boolean;
+  onSave: (updated: any) => void;
+  onClose: () => void;
+}) {
+  const [editCode, setEditCode] = useState(code.code || "");
+  const [editRewardName, setEditRewardName] = useState(code.rewardName || "");
+  const [editDesc, setEditDesc] = useState(code.description || "");
+  const [editLink, setEditLink] = useState(code.rewardLink || "");
+  const [editDiscount, setEditDiscount] = useState(code.discountPct ? String(code.discountPct) : "");
+  const [editMax, setEditMax] = useState(String(code.maxUses || 1));
+  const [editExpiry, setEditExpiry] = useState(code.expiresAt ? new Date(code.expiresAt).toISOString().slice(0, 16) : "");
+  const [editActive, setEditActive] = useState(code.active !== false);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl glass-strong p-6 ring-1 ring-border/40 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-bold flex items-center gap-2"><Pencil className="h-4 w-4 text-gold" /> Edit Code</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="space-y-3">
+          <div><Label className="text-xs text-muted-foreground mb-1">Code</Label><Input value={editCode} onChange={(e) => setEditCode(e.target.value.toUpperCase())} className="glass text-sm font-mono" /></div>
+          <div><Label className="text-xs text-muted-foreground mb-1">Reward Name</Label><Input value={editRewardName} onChange={(e) => setEditRewardName(e.target.value)} className="glass text-sm" /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-xs text-muted-foreground mb-1">Discount %</Label><Input type="number" min="0" max="100" value={editDiscount} onChange={(e) => setEditDiscount(e.target.value)} className="glass text-sm" placeholder="empty = none" /></div>
+            <div><Label className="text-xs text-muted-foreground mb-1">Max Uses</Label><Input type="number" value={editMax} onChange={(e) => setEditMax(e.target.value)} className="glass text-sm" /></div>
+          </div>
+          <div><Label className="text-xs text-muted-foreground mb-1">Reward Link</Label><Input value={editLink} onChange={(e) => setEditLink(e.target.value)} className="glass text-sm" placeholder="https://..." /></div>
+          <div><Label className="text-xs text-muted-foreground mb-1">Description</Label><Input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} className="glass text-sm" /></div>
+          <div><Label className="text-xs text-muted-foreground mb-1">Expiry Date</Label><Input type="datetime-local" value={editExpiry} onChange={(e) => setEditExpiry(e.target.value)} className="glass text-sm" /></div>
+          <div className="flex items-center justify-between rounded-lg glass px-4 py-2 ring-1 ring-border/40">
+            <span className="text-sm">Active</span>
+            <Switch checked={editActive} onCheckedChange={setEditActive} />
+          </div>
+          <Button
+            onClick={() => onSave({
+              id: code.id,
+              code: editCode,
+              rewardName: editRewardName,
+              description: editDesc,
+              rewardLink: editLink || null,
+              discountPct: editDiscount || null,
+              maxUses: editMax,
+              expiresAt: editExpiry || null,
+              active: editActive,
+            })}
+            disabled={saving}
+            className="w-full gap-2 bg-gradient-to-r from-gold to-amber-400 text-black text-sm"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Save Changes
+          </Button>
+        </div>
       </div>
     </div>
   );
