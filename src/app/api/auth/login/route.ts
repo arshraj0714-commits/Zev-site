@@ -35,6 +35,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
+    // Check if email is verified (skip for admin)
+    if (!user.emailVerified && !isAdminEmail(emailLower)) {
+      return NextResponse.json({
+        error: "Please verify your email first. Check your inbox for the verification code.",
+        needsVerification: true,
+        email: emailLower,
+      }, { status: 403 });
+    }
+
     const appUser = toAppUser(user);
     const token = createToken(appUser);
 
