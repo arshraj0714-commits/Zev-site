@@ -10,7 +10,9 @@ export type ViewId =
   | "upload"
   | "about"
   | "auth"
-  | "orders";
+  | "orders"
+  | "settings"
+  | "redeem";
 
 interface CheckoutTarget {
   itemType: "product" | "stock";
@@ -58,7 +60,7 @@ interface ZevStore {
 function getViewFromHash(): ViewId {
   if (typeof window === "undefined") return "home";
   const h = window.location.hash.replace("#/", "").replace("#", "");
-  const valid: ViewId[] = ["home", "products", "opensource", "stock", "upload", "about", "auth", "orders"];
+  const valid: ViewId[] = ["home", "products", "opensource", "stock", "upload", "about", "auth", "orders", "settings", "redeem"];
   return (valid.includes(h as ViewId) ? (h as ViewId) : "home");
 }
 

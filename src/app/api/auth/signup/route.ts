@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createUser, findUserByEmail, createToken, toAppUser, isAdminEmail } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/email";
 
-// POST /api/auth/signup
+// POST /api/auth/signup — simple signup (no email verification)
 export async function POST(req: NextRequest) {
   try {
     const { email, password, name } = await req.json();
@@ -27,12 +27,12 @@ export async function POST(req: NextRequest) {
     const token = createToken(appUser);
     const admin = isAdminEmail(emailLower);
 
-    // Send welcome email (non-blocking — don't fail signup if email fails)
+    // Try to send welcome email (non-blocking)
     let emailSent = false;
     try {
       const result = await sendWelcomeEmail(emailLower, appUser.name, admin);
       emailSent = result.sent;
-    } catch { /* don't block signup */ }
+    } catch { /* non-blocking */ }
 
     return NextResponse.json({
       token,

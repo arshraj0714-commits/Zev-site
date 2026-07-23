@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Sparkles, LogOut, LayoutDashboard, User as UserIcon, ClipboardList, Search } from "lucide-react";
+import { Menu, X, Sparkles, LogOut, LayoutDashboard, User as UserIcon, ClipboardList, Settings, Gift, Search } from "lucide-react";
 import { useZev, type ViewId } from "@/lib/store";
 import { ZevWordmark } from "./logo";
 import { Button } from "@/components/ui/button";
@@ -147,6 +147,12 @@ export function Navbar() {
                   <DropdownMenuItem onClick={() => go("orders")} className="gap-2 cursor-pointer">
                     <ClipboardList className="h-4 w-4" /> My Orders
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => go("redeem")} className="gap-2 cursor-pointer">
+                    <Gift className="h-4 w-4" /> Redeem Code
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => go("settings")} className="gap-2 cursor-pointer">
+                    <Settings className="h-4 w-4" /> Settings
+                  </DropdownMenuItem>
                   {admin.role === "admin" && (
                     <DropdownMenuItem onClick={() => go("upload")} className="gap-2 cursor-pointer">
                       <LayoutDashboard className="h-4 w-4" /> Dashboard
@@ -239,6 +245,12 @@ export function Navbar() {
                 <>
                   <Button variant="ghost" size="sm" onClick={() => { go("orders"); }} className="justify-start gap-2 rounded-xl">
                     <ClipboardList className="h-4 w-4" /> My Orders
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => { go("redeem"); }} className="justify-start gap-2 rounded-xl">
+                    <Gift className="h-4 w-4" /> Redeem Code
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => { go("settings"); }} className="justify-start gap-2 rounded-xl">
+                    <Settings className="h-4 w-4" /> Settings
                   </Button>
                   {admin.role === "admin" && (
                     <Button variant="ghost" size="sm" onClick={() => { go("upload"); }} className="justify-start gap-2 rounded-xl">

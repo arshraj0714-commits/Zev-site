@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Package, Boxes, Code2, X, Plus,
-  CheckCircle2, Loader2, Trash2, ShieldCheck, Lock, LogOut, Pencil, FileArchive, Upload, FileText,
+  CheckCircle2, Loader2, Trash2, ShieldCheck, Lock, LogOut, Pencil, FileArchive, Upload, FileText, Gift,
 } from "lucide-react";
 import { SectionHeading } from "@/components/site/section-heading";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import { EditProductModal } from "@/components/views/edit-product-modal";
 import { EditStockModal, EditOpenSourceModal } from "@/components/views/edit-stock-opensource-modals";
 import { useZev } from "@/lib/store";
 import { useProducts, useStock, useOpenSource, useOrders, type Product, type StockItem, type OpenSourceItem } from "@/hooks/use-data";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -567,6 +567,113 @@ export function UploadView() {
         open={!!editingOS}
         onOpenChange={(o) => { if (!o) setEditingOS(null); }}
       />
+
+      {/* Redeem Codes section (admin) */}
+      <RedeemCodesSection />
+    </div>
+  );
+}
+
+// ---------- Redeem Codes section (admin only) ----------
+function RedeemCodesSection() {
+  const qc = useQueryClient();
+  const [newCode, setNewCode] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [newMax, setNewMax] = useState("1");
+  const [newExpiry, setNewExpiry] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const { data } = useQuery({
+    queryKey: ["admin-redeem-codes"],
+    queryFn: async () => {
+      const token = JSON.parse(localStorage.getItem("zev-auth") || "{}").token;
+      const res = await fetch("/api/redeem", { headers: { Authorization: `Bearer ${token}` } });
+      const text = await res.text();
+      try { return JSON.parse(text); } catch { return {}; }
+    },
+  });
+  const codes = (data as any)?.codes ?? [];
+
+  async function createCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newCode) { toast.error("Code is required"); return; }
+    setSaving(true);
+    try {
+      const token = JSON.parse(localStorage.getItem("zev-auth") || "{}").token;
+      const res = await fetch("/api/redeem/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          code: newCode,
+          description: newDesc,
+          rewardType: "discount",
+          rewardName: newDesc || "Special Reward",
+          maxUses: Number(newMax) || 1,
+          expiresAt: newExpiry || null,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed");
+      }
+      toast.success("Redeem code created!");
+      setNewCode(""); setNewDesc(""); setNewMax("1"); setNewExpiry("");
+      qc.invalidateQueries({ queryKey: ["admin-redeem-codes"] });
+      qc.invalidateQueries({ queryKey: ["redeem-codes"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteCode(id: string) {
+    if (!confirm("Delete this code?")) return;
+    const token = JSON.parse(localStorage.getItem("zev-auth") || "{}").token;
+    const res = await fetch(`/api/redeem/create?id=${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    if (res.ok) {
+      toast.success("Deleted");
+      qc.invalidateQueries({ queryKey: ["admin-redeem-codes"] });
+      qc.invalidateQueries({ queryKey: ["redeem-codes"] });
+    }
+  }
+
+  return (
+    <div className="mt-8 rounded-2xl glass p-5 ring-1 ring-border/40">
+      <h4 className="mb-3 font-semibold flex items-center gap-2">
+        <Gift className="h-4 w-4 text-gold" /> Redeem Codes ({codes.length})
+      </h4>
+
+      {/* Create form */}
+      <form onSubmit={createCode} className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <Input value={newCode} onChange={(e) => setNewCode(e.target.value.toUpperCase())} className="glass text-sm font-mono" placeholder="CODE" />
+        <Input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} className="glass text-sm" placeholder="Reward / description" />
+        <Input type="number" value={newMax} onChange={(e) => setNewMax(e.target.value)} className="glass text-sm" placeholder="Max uses" />
+        <Input type="datetime-local" value={newExpiry} onChange={(e) => setNewExpiry(e.target.value)} className="glass text-sm" />
+        <Button type="submit" disabled={saving} className="sm:col-span-2 lg:col-span-4 gap-2 bg-gradient-to-r from-gold to-amber-400 text-black text-sm">
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Create Code
+        </Button>
+      </form>
+
+      {/* Existing codes */}
+      <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
+        {codes.map((c: any) => (
+          <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
+            <div className="min-w-0 flex-1">
+              <code className="font-mono font-bold text-gold">{c.code}</code>
+              <span className="ml-2 text-xs text-muted-foreground">{c.rewardName || c.description}</span>
+              <div className="text-xs text-muted-foreground">
+                {c.usesCount}/{c.maxUses} used · {c.active ? "active" : "inactive"}
+                {c.expiresAt && ` · exp ${new Date(c.expiresAt).toLocaleDateString()}`}
+              </div>
+            </div>
+            <button onClick={() => deleteCode(c.id)} className="text-muted-foreground hover:text-rose-400">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+        {codes.length === 0 && <p className="text-sm text-muted-foreground">No codes yet.</p>}
+      </div>
     </div>
   );
 }

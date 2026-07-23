@@ -3,7 +3,7 @@
 import { motion, useScroll, useTransform } from "framer-motion";
 import {
   ArrowRight, Sparkles, ShieldCheck, Zap, Coins, Github,
-  TrendingUp, Users, Package, CheckCircle2, Wallet, Link2,
+  TrendingUp, Users, Package, CheckCircle2, Wallet, Link2, Gift,
 } from "lucide-react";
 import { useZev } from "@/lib/store";
 import { useProducts, useStats, usePrices } from "@/hooks/use-data";
@@ -12,6 +12,7 @@ import { SectionHeading } from "@/components/site/section-heading";
 import { MarketplaceCard, type CardItem } from "@/components/site/marketplace-card";
 import { SITE_CONFIG } from "@/lib/config";
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: string }) {
   const [display, setDisplay] = useState(0);
@@ -183,6 +184,9 @@ export function HomeView() {
         </motion.div>
       </section>
 
+      {/* ===== REDEEM CODE BANNERS ===== */}
+      <RedeemBanners />
+
       {/* ===== FEATURED ===== */}
       {showcase.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -326,5 +330,65 @@ export function HomeView() {
         </motion.div>
       </section>
     </div>
+  );
+}
+
+// ============= REDEEM BANNERS =============
+function RedeemBanners() {
+  const { go } = useZev();
+  const { data } = useQuery({
+    queryKey: ["home-redeem-codes"],
+    queryFn: async () => {
+      const res = await fetch("/api/redeem");
+      const text = await res.text();
+      try { return JSON.parse(text); } catch { return {}; }
+    },
+  });
+  const codes = ((data as any)?.codes ?? []).filter((c: any) => c.active);
+  if (codes.length === 0) return null;
+
+  return (
+    <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {codes.map((c: any, i: number) => {
+          const remaining = c.maxUses - c.usesCount;
+          if (remaining <= 0) return null;
+          const expired = c.expiresAt && new Date(c.expiresAt) < new Date();
+          if (expired) return null;
+          return (
+            <motion.div
+              key={c.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.08 }}
+              className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-gold/15 via-emerald-500/10 to-transparent p-4 ring-1 ring-gold/20"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-gold/30 to-emerald-500/20 ring-1 ring-gold/30">
+                  <Gift className="h-5 w-5 text-gold" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <code className="font-mono text-sm font-bold text-gold">{c.code}</code>
+                    <span className="text-xs text-muted-foreground">{c.rewardName || c.description}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {remaining} use{remaining !== 1 ? "s" : ""} left
+                    {c.expiresAt && ` · expires ${new Date(c.expiresAt).toLocaleDateString()}`}
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => go("redeem")}
+                    className="mt-2 h-7 gap-1 bg-gradient-to-r from-gold to-amber-400 px-3 text-xs text-black"
+                  >
+                    <Gift className="h-3 w-3" /> Redeem
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </section>
   );
 }

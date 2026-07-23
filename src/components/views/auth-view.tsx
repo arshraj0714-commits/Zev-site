@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Mail, Lock, User as UserIcon, Loader2, ShieldCheck,
-  Sparkles, ArrowRight, KeyRound, ArrowLeft,
+  Sparkles, ArrowRight, KeyRound, RefreshCw,
 } from "lucide-react";
 import { useZev } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -26,21 +26,135 @@ function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
-type Phase = "form" | "verify";
+// Generate a random 6-char captcha code (letters + numbers, no confusing chars)
+function generateCaptcha(): string {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
 
 export function AuthView() {
   const { setAuth, go } = useZev();
   const [mode, setMode] = useState<"signin" | "signup">("signup");
-  const [phase, setPhase] = useState<Phase>("form");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const [captchaCode, setCaptchaCode] = useState("");
+  const [captchaInput, setCaptchaInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [fallbackCode, setFallbackCode] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // ---- Sign In (existing users) ----
+  // Generate and draw the captcha code on a canvas
+  const drawCaptcha = (code: string) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    // Background
+    const grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, "rgba(16, 185, 129, 0.08)");
+    grad.addColorStop(1, "rgba(245, 158, 11, 0.08)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    // Noise lines
+    for (let i = 0; i < 4; i++) {
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.05 + Math.random() * 0.1})`;
+      ctx.lineWidth = 1 + Math.random();
+      ctx.beginPath();
+      ctx.moveTo(Math.random() * w, Math.random() * h);
+      ctx.bezierCurveTo(
+        Math.random() * w, Math.random() * h,
+        Math.random() * w, Math.random() * h,
+        Math.random() * w, Math.random() * h
+      );
+      ctx.stroke();
+    }
+    // Characters
+    ctx.font = "bold 28px 'Courier New', monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const spacing = w / (code.length + 1);
+    for (let i = 0; i < code.length; i++) {
+      const x = spacing * (i + 1);
+      const y = h / 2 + (Math.random() - 0.5) * 8;
+      const angle = (Math.random() - 0.5) * 0.4;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      // Alternate emerald/gold colors
+      ctx.fillStyle = i % 2 === 0 ? "#10b981" : "#f59e0b";
+      ctx.fillText(code[i], 0, 0);
+      ctx.restore();
+    }
+    // Dots noise
+    for (let i = 0; i < 30; i++) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.15})`;
+      ctx.beginPath();
+      ctx.arc(Math.random() * w, Math.random() * h, Math.random() * 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+
+  // Regenerate captcha
+  const refreshCaptcha = () => {
+    const newCode = generateCaptcha();
+    setCaptchaCode(newCode);
+    setTimeout(() => drawCaptcha(newCode), 10);
+  };
+
+  // Initialize captcha on mount and when switching to signup mode
+  useEffect(() => {
+    refreshCaptcha();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  // ---- Sign Up (with captcha) ----
+  async function handleSignUp(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email || !password) {
+      toast.error("Email and password are required");
+      return;
+    }
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+    if (captchaInput.trim().toUpperCase() !== captchaCode) {
+      toast.error("Verification code doesn't match. Please try again.");
+      refreshCaptcha();
+      setCaptchaInput("");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name }),
+      });
+      let data: any = {};
+      try { data = await res.json(); } catch { data = {}; }
+      if (!res.ok) throw new Error(data.error || "Something went wrong");
+      setAuth(data.user, data.token);
+      toast.success(data.message || "Account created!");
+      if (data.user?.role === "admin") go("upload");
+      else go("home");
+    } catch (e) {
+      toast.error((e as Error).message);
+      refreshCaptcha();
+      setCaptchaInput("");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ---- Sign In ----
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     if (!email || !password) {
@@ -56,122 +170,11 @@ export function AuthView() {
       });
       let data: any = {};
       try { data = await res.json(); } catch { data = {}; }
-      if (!res.ok) {
-        // If needs verification, jump to verify phase
-        if (data.needsVerification) {
-          // Resend a code
-          await fetch("/api/auth/send-code", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password, name }),
-          });
-          setPhase("verify");
-          toast.info("Please verify your email. A new code has been sent.");
-        } else {
-          throw new Error(data.error || "Something went wrong");
-        }
-        return;
-      }
+      if (!res.ok) throw new Error(data.error || "Something went wrong");
       setAuth(data.user, data.token);
       toast.success(data.message || "Signed in!");
       if (data.user?.role === "admin") go("upload");
       else go("home");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // ---- Sign Up Step 1: send verification code ----
-  async function handleSendCode(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email || !password) {
-      toast.error("Email and password are required");
-      return;
-    }
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters");
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/send-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name }),
-      });
-      let data: any = {};
-      try { data = await res.json(); } catch { data = {}; }
-      if (!res.ok) throw new Error(data.error || "Failed to send code");
-      setPhase("verify");
-      if (data.sent) {
-        // Email sent successfully
-        toast.success("Verification code sent! Check your email inbox.");
-        setFallbackCode(null);
-      } else if (data.fallbackCode) {
-        // Email failed — show code on screen as fallback
-        setFallbackCode(data.fallbackCode);
-        toast.warning("Email couldn't be sent — your code is shown below.", {
-          description: "To fix email delivery, visit /api/email-test",
-          duration: 6000,
-        });
-      }
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // ---- Sign Up Step 2: verify code & create account ----
-  async function handleVerifyCode(e: React.FormEvent) {
-    e.preventDefault();
-    if (!code) {
-      toast.error("Enter the 6-digit verification code");
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/verify-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code }),
-      });
-      let data: any = {};
-      try { data = await res.json(); } catch { data = {}; }
-      if (!res.ok) throw new Error(data.error || "Verification failed");
-      setAuth(data.user, data.token);
-      toast.success(data.message || "Email verified! Account created.");
-      if (data.user?.role === "admin") go("upload");
-      else go("home");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // ---- Resend code ----
-  async function handleResendCode() {
-    if (!email || !password) return;
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/send-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name }),
-      });
-      let data: any = {};
-      try { data = await res.json(); } catch { data = {}; }
-      if (!res.ok) throw new Error(data.error || "Failed to resend");
-      if (data.sent) {
-        setFallbackCode(null);
-        toast.success("New code sent to your email!");
-      } else if (data.fallbackCode) {
-        setFallbackCode(data.fallbackCode);
-        toast.info("New code generated — shown below.");
-      }
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -200,171 +203,133 @@ export function AuthView() {
             <ZevLogo className="h-14 w-14" />
           </motion.div>
           <h1 className="mt-4 text-3xl font-bold">
-            <span className="text-gradient-mixed">
-              {phase === "verify" ? "Verify Your Email" : "Welcome to Zev"}
-            </span>
+            <span className="text-gradient-mixed">Welcome to Zev</span>
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {phase === "verify"
-              ? `Enter the 6-digit code sent to ${email}`
-              : mode === "signup"
-              ? "Create your account to get started"
-              : "Sign in to your account"}
+            {mode === "signup" ? "Create your account to get started" : "Sign in to your account"}
           </p>
         </div>
 
         {/* Card */}
         <div className="mt-8 rounded-3xl glass-strong p-6 ring-1 ring-border/40 sm:p-8">
-          {/* ===== VERIFY PHASE ===== */}
-          {phase === "verify" ? (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-              <form onSubmit={handleVerifyCode} className="space-y-4">
-                <div className="flex flex-col items-center text-center py-2">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-gold/20 ring-1 ring-emerald-glow/30">
-                    <KeyRound className="h-7 w-7 text-emerald-glow" />
-                  </div>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    {fallbackCode
-                      ? "Email delivery is not configured. Your code is shown below."
-                      : <>We sent a 6-digit code to<br/><span className="font-semibold text-foreground">{email}</span></>}
-                  </p>
-                </div>
+          {/* Google sign-in button */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleGoogleSignIn}
+            className="w-full gap-3 glass bg-background/40 py-2.5 hover:bg-background/60"
+          >
+            <GoogleIcon /> Continue with Google
+          </Button>
 
-                {/* Fallback code display (when email failed) */}
-                {fallbackCode && (
-                  <div className="rounded-xl bg-emerald-500/10 p-4 ring-1 ring-emerald-glow/30 text-center">
-                    <p className="text-xs text-emerald-glow font-medium mb-1">Your verification code:</p>
-                    <p className="text-3xl font-mono font-bold tracking-[0.4em] text-foreground">{fallbackCode}</p>
-                    <button
-                      type="button"
-                      onClick={() => { navigator.clipboard.writeText(fallbackCode); setCode(fallbackCode); toast.success("Code copied & entered!"); }}
-                      className="mt-2 text-xs text-emerald-glow hover:underline"
-                    >
-                      Click to copy & enter →
-                    </button>
-                  </div>
-                )}
+          {/* Divider */}
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border/60" />
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">or use email</span>
+            <div className="h-px flex-1 bg-border/60" />
+          </div>
 
+          {/* Tabs */}
+          <Tabs value={mode} onValueChange={(v) => setMode(v as "signin" | "signup")}>
+            <TabsList className="grid w-full grid-cols-2 glass">
+              <TabsTrigger value="signup" className="gap-1.5">
+                <UserIcon className="h-3.5 w-3.5" /> Sign Up
+              </TabsTrigger>
+              <TabsTrigger value="signin" className="gap-1.5">
+                <Lock className="h-3.5 w-3.5" /> Sign In
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="signup" className="mt-5">
+              <form onSubmit={handleSignUp} className="space-y-4">
                 <div>
-                  <Label className="flex items-center gap-1.5"><KeyRound className="h-3.5 w-3.5" /> Verification Code</Label>
-                  <Input
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    className="glass text-center text-2xl font-mono tracking-[0.5em]"
-                    placeholder="000000"
-                    inputMode="numeric"
-                    maxLength={6}
-                    autoComplete="one-time-code"
-                  />
+                  <Label className="flex items-center gap-1.5"><UserIcon className="h-3.5 w-3.5" /> Name</Label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} className="glass" placeholder="Your name" />
                 </div>
-                <Button type="submit" disabled={loading || code.length !== 6} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950 hover:from-emerald-400 hover:to-emerald-300">
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                  {loading ? "Verifying..." : "Verify & Create Account"}
+                <div>
+                  <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</Label>
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="glass" placeholder="you@email.com" autoComplete="email" />
+                </div>
+                <div>
+                  <Label className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Password</Label>
+                  <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="glass" placeholder="At least 6 characters" autoComplete="new-password" />
+                </div>
+
+                {/* Captcha verification */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> Verify you're human</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative rounded-lg overflow-hidden ring-1 ring-border/40" style={{ width: 160, height: 50 }}>
+                      <canvas
+                        ref={canvasRef}
+                        width={160}
+                        height={50}
+                        className="block"
+                      />
+                      <button
+                        type="button"
+                        onClick={refreshCaptcha}
+                        className="absolute right-1 top-1 rounded-md bg-background/60 p-1 text-muted-foreground hover:text-foreground"
+                        title="Refresh code"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <Input
+                      value={captchaInput}
+                      onChange={(e) => setCaptchaInput(e.target.value.toUpperCase().slice(0, 6))}
+                      className="glass flex-1 font-mono uppercase tracking-widest"
+                      placeholder="ENTER CODE"
+                      maxLength={6}
+                    />
+                  </div>
+                </div>
+
+                <Button type="submit" disabled={loading} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950 hover:from-emerald-400 hover:to-emerald-300">
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  {loading ? "Creating account..." : "Create Account"}
                 </Button>
-                <div className="flex items-center justify-between text-xs">
-                  <button type="button" onClick={() => setPhase("form")} className="flex items-center gap-1 text-muted-foreground hover:text-foreground">
-                    <ArrowLeft className="h-3 w-3" /> Back
-                  </button>
-                  <button type="button" onClick={handleResendCode} disabled={loading} className="text-emerald-glow hover:underline">
-                    Resend code
-                  </button>
-                </div>
               </form>
-            </motion.div>
-          ) : (
-            /* ===== FORM PHASE ===== */
-            <>
-              {/* Google sign-in button */}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleGoogleSignIn}
-                className="w-full gap-3 glass bg-background/40 py-2.5 hover:bg-background/60"
-              >
-                <GoogleIcon /> Continue with Google
-              </Button>
+            </TabsContent>
 
-              {/* Divider */}
-              <div className="my-6 flex items-center gap-3">
-                <div className="h-px flex-1 bg-border/60" />
-                <span className="text-xs uppercase tracking-wider text-muted-foreground">or use email</span>
-                <div className="h-px flex-1 bg-border/60" />
-              </div>
+            <TabsContent value="signin" className="mt-5">
+              <form onSubmit={handleSignIn} className="space-y-4">
+                <div>
+                  <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</Label>
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="glass" placeholder="you@email.com" autoComplete="email" />
+                </div>
+                <div>
+                  <Label className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Password</Label>
+                  <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="glass" placeholder="••••••••" autoComplete="current-password" />
+                </div>
+                <Button type="submit" disabled={loading} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950 hover:from-emerald-400 hover:to-emerald-300">
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                  {loading ? "Signing in..." : "Sign In"}
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
 
-              {/* Tabs */}
-              <Tabs value={mode} onValueChange={(v) => setMode(v as "signin" | "signup")}>
-                <TabsList className="grid w-full grid-cols-2 glass">
-                  <TabsTrigger value="signup" className="gap-1.5">
-                    <UserIcon className="h-3.5 w-3.5" /> Sign Up
-                  </TabsTrigger>
-                  <TabsTrigger value="signin" className="gap-1.5">
-                    <Lock className="h-3.5 w-3.5" /> Sign In
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="signup" className="mt-5">
-                  <form onSubmit={handleSendCode} className="space-y-4">
-                    <div>
-                      <Label className="flex items-center gap-1.5"><UserIcon className="h-3.5 w-3.5" /> Name</Label>
-                      <Input value={name} onChange={(e) => setName(e.target.value)} className="glass" placeholder="Your name" />
-                    </div>
-                    <div>
-                      <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</Label>
-                      <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="glass" placeholder="you@email.com" autoComplete="email" />
-                    </div>
-                    <div>
-                      <Label className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Password</Label>
-                      <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="glass" placeholder="At least 6 characters" autoComplete="new-password" />
-                    </div>
-                    <Button type="submit" disabled={loading} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950 hover:from-emerald-400 hover:to-emerald-300">
-                      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                      {loading ? "Sending code..." : "Send Verification Code"}
-                    </Button>
-                  </form>
-                </TabsContent>
-
-                <TabsContent value="signin" className="mt-5">
-                  <form onSubmit={handleSignIn} className="space-y-4">
-                    <div>
-                      <Label className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</Label>
-                      <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="glass" placeholder="you@email.com" autoComplete="email" />
-                    </div>
-                    <div>
-                      <Label className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Password</Label>
-                      <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="glass" placeholder="••••••••" autoComplete="current-password" />
-                    </div>
-                    <Button type="submit" disabled={loading} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950 hover:from-emerald-400 hover:to-emerald-300">
-                      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                      {loading ? "Signing in..." : "Sign In"}
-                    </Button>
-                  </form>
-                </TabsContent>
-              </Tabs>
-
-              {/* Info note */}
-              <div className="mt-5 flex items-start gap-2 rounded-xl bg-emerald-500/10 p-3 ring-1 ring-emerald-glow/20">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-glow" />
-                <p className="text-xs text-muted-foreground">
-                  {mode === "signup" ? (
-                    <>We&apos;ll send a 6-digit verification code to your email. Enter it to complete signup. Your password is securely hashed.</>
-                  ) : (
-                    <>Don&apos;t have an account? Switch to <span className="font-semibold text-foreground">Sign Up</span> above.</>
-                  )}
-                </p>
-              </div>
-            </>
-          )}
+          {/* Info note */}
+          <div className="mt-5 flex items-start gap-2 rounded-xl bg-emerald-500/10 p-3 ring-1 ring-emerald-glow/20">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-glow" />
+            <p className="text-xs text-muted-foreground">
+              {mode === "signup" ? (
+                <>Your password is securely hashed. Admin access is granted automatically to the site owner.</>
+              ) : (
+                <>Don&apos;t have an account? Switch to <span className="font-semibold text-foreground">Sign Up</span> above.</>
+              )}
+            </p>
+          </div>
         </div>
 
         {/* Back home */}
-        {phase === "form" && (
-          <button
-            onClick={() => go("home")}
-            className="mt-6 flex w-full items-center justify-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            ← Back to home
-          </button>
-        )}
+        <button
+          onClick={() => go("home")}
+          className="mt-6 flex w-full items-center justify-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          ← Back to home
+        </button>
       </motion.div>
     </div>
   );
