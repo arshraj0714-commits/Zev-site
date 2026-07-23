@@ -67,26 +67,43 @@ model OpenSource {
 // Orders / purchases
 model Order {
   id            String   @id @default(cuid())
-  orderNumber   String   @unique // human-readable, e.g. "ZEV-A4F2K9"
-  itemType      String // "product" | "stock"
+  orderNumber   String   @unique
+  itemType      String
   productId     String?
   stockId       String?
   product       Product?  @relation(fields: [productId], references: [id])
   stock         StockItem? @relation(fields: [stockId], references: [id])
   itemName      String
-  amount        Float // USD amount
-  paymentMethod String // "LTC" | "BTC" | "SOL" | "USDT"
-  cryptoAmount  Float // amount in crypto
+  amount        Float
+  paymentMethod String
+  cryptoAmount  Float
   txHash        String?
   buyerEmail    String?
   buyerDiscord  String?
-  status        String   @default("pending") // "pending" | "paid" | "failed"
-  deliveredContent String? // revealed content snapshot
+  status        String   @default("pending")
+  deliveredContent String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  payment       Payment?
 
   @@index([buyerEmail])
   @@index([status])
+}
+
+// Payment verification records
+model Payment {
+  id                 String   @id @default(cuid())
+  orderId            String   @unique
+  order              Order    @relation(fields: [orderId], references: [id])
+  blockchain         String   // "BTC" | "LTC" | "SOL" | "USDT"
+  walletAddress      String
+  transactionHash    String?  @unique
+  amountReceived     Float    @default(0)
+  confirmations      Int      @default(0)
+  verificationSource String   // "blockstream" | "litecoinspace" | "helius" | "bscscan"
+  status             String   @default("pending") // "pending" | "confirmed" | "failed"
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 // Site-wide stats (singleton row)

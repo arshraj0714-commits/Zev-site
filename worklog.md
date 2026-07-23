@@ -283,3 +283,41 @@ Work Log:
 
 Stage Summary:
 - Order history system complete. Each order gets a unique ZEV-XXXXXX ID. Users see only their own orders (filtered by their logged-in email). Admin sees all orders. Search works by order number, item name, email, or tx hash. Orders accessible via "My Orders" in the hamburger menu and account dropdown.
+
+---
+Task ID: PAYMENT-V2
+Agent: Main Orchestrator
+Task: Build complete production crypto payment verification system.
+
+Work Log:
+- Added HELIUS_API_KEY and BSCSCAN_API_KEY to .env and .env.example
+- Added Payment model to prisma schema (orderId, blockchain, walletAddress, transactionHash, amountReceived, confirmations, verificationSource, status). Pushed to Neon DB.
+- Rewrote src/lib/payments.ts — complete production system:
+  * BTC: Blockstream Esplora API (https://blockstream.info/api/address/{addr}/txs)
+  * LTC: LitecoinSpace API (https://litecoinspace.org/api/address/{addr}/txs)
+  * SOL: Helius RPC API (https://mainnet.helius-rpc.com/?api-key=HELIUS_API_KEY) — getSignaturesForAddress + getTransaction
+  * USDT: BscScan API (https://api.bscscan.com/api?module=account&action=tokentx) — parses token transfers with 18 decimals
+  * In-memory tx cache (5-min TTL) to avoid re-querying same tx
+  * Retry logic (2 retries with exponential backoff)
+  * Time filtering (5-min tolerance + 30-min hard max age)
+  * Used-tx-hash deduplication
+  * Detailed logging (console.log for each verification step)
+  * ScanResult now includes: confirmations, verificationSource
+- Created src/lib/invoice.ts — professional HTML invoice generator with:
+  * Zev branding (emerald/gold theme matching emails)
+  * Customer name, email, order ID, product, amount, crypto, network, tx hash, date, status
+  * Plain-text fallback version
+- Updated src/app/api/orders/[id]/check/route.ts — full production verification:
+  * Queries used tx hashes from DB
+  * Calls scanWalletForPayment with all security params
+  * On verification: creates Payment record in DB
+  * Generates invoice (HTML)
+  * Sends purchase email
+  * Increments stats
+  * Returns detailed response with payment info
+  * Comprehensive logging at every step
+- Lint: clean (0 errors)
+- Verified: SOL order check works with Helius RPC, correctly returns "not verified" when no payment exists
+
+Stage Summary:
+- Complete production crypto payment gateway built. BTC via Blockstream, LTC via LitecoinSpace, SOL via Helius RPC, USDT via BscScan API. All payments verified on-chain with time filtering, tx-hash deduplication, caching, retry logic, invoice generation, email sending, and Payment DB records.

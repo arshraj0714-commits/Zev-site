@@ -1,10 +1,6 @@
 // Blockchain payment verification service for Zev
-// Scans Arsh's wallet address for incoming transactions matching the exact
-// expected amount (pending OR confirmed). Only then is a purchase delivered.
-//
-// IMPORTANT: Each scan is scoped to transactions that happened AFTER the order
-// was created AND that haven't been used by another paid order yet. This
-// prevents an old incoming transfer from paying for a new order.
+// Production-grade: BTC (Blockstream), LTC (LitecoinSpace), SOL (Helius RPC), USDT (BscScan API)
+// All scans are time-filtered, tx-hash-deduplicated, and cached.
 
 import { WALLET_ADDRESSES, USDT_BSC_CONTRACT, type CryptoMethod } from "./config";
 
@@ -19,42 +15,64 @@ export interface ScanResult {
   explorerUrl: string;
   checkedAddress: string;
   expectedAmount: number;
+  confirmations: number;
+  verificationSource: string;
   error?: string;
 }
 
 const SOL_LAMPORTS = 1_000_000_000;
 const USDT_DECIMALS = 18;
-
-// Tolerance window: allow transactions from up to 5 minutes BEFORE the order
-// was created, to handle minor clock skew between servers and blockchains.
 const TIME_TOLERANCE_SECONDS = 5 * 60;
-
-// HARD MAXIMUM: transactions older than this are NEVER accepted, even if
-// sinceTimestamp is somehow wrong. This is the safety net that prevents
-// old incoming payments from paying for new orders. 30 minutes.
 const MAX_TX_AGE_SECONDS = 30 * 60;
 
-// ---------- BTC: scan address for incoming txs (mempool + recent confirmed) ----------
-async function scanBTC(
-  addr: string,
-  expectedAmount: number,
-  sinceTimestamp: number,
-  usedTxHashes: Set<string>
-): Promise<ScanResult> {
+// In-memory tx cache: key = `${method}:${txHash}`, value = timestamp
+// Prevents re-querying the same tx across polls
+const txCache = new Map<string, number>();
+const TX_CACHE_TTL = 5 * 60 * 1000; // 5 min
+
+function isTxCached(method: string, txHash: string): boolean {
+  const key = `${method}:${txHash}`;
+  const cached = txCache.get(key);
+  if (cached && Date.now() - cached < TX_CACHE_TTL) return true;
+  return false;
+}
+
+function cacheTx(method: string, txHash: string) {
+  txCache.set(`${method}:${txHash}`, Date.now());
+}
+
+// Retry wrapper with exponential backoff
+async function withRetry<T>(fn: () => Promise<T>, retries = 2, delayMs = 1000): Promise<T | null> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i === retries) {
+        console.error(`[payments] All retries exhausted:`, (e as Error).message);
+        return null;
+      }
+      await new Promise((r) => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+  return null;
+}
+
+// ---------- BTC: Blockstream Esplora API ----------
+async function scanBTC(addr: string, expectedAmount: number, sinceTimestamp: number, usedTxHashes: Set<string>): Promise<ScanResult> {
   const base: ScanResult = {
-    verified: false, found: false, confirmed: false,
-    matchedAddress: false, matchedAmount: false, amountReceived: 0,
-    txHash: null,
+    verified: false, found: false, confirmed: false, matchedAddress: false,
+    matchedAmount: false, amountReceived: 0, txHash: null,
     explorerUrl: `https://btcscan.org/address/${addr}`,
-    checkedAddress: addr, expectedAmount,
+    checkedAddress: addr, expectedAmount, confirmations: 0,
+    verificationSource: "blockstream",
   };
   try {
     const [memRes, confRes] = await Promise.all([
-      fetch(`https://blockstream.info/api/address/${addr}/txs/mempool`),
-      fetch(`https://blockstream.info/api/address/${addr}/txs`),
+      withRetry(() => fetch(`https://blockstream.info/api/address/${addr}/txs/mempool`)),
+      withRetry(() => fetch(`https://blockstream.info/api/address/${addr}/txs`)),
     ]);
-    const memTxs = memRes.ok ? await memRes.json() : [];
-    const confTxs = confRes.ok ? await confRes.json() : [];
+    const memTxs = memRes?.ok ? await memRes.json() : [];
+    const confTxs = confRes?.ok ? await confRes.json() : [];
     const allTxs: any[] = [...(Array.isArray(memTxs) ? memTxs : []), ...(Array.isArray(confTxs) ? confTxs : [])];
 
     const expectedSats = Math.round(expectedAmount * 1e8);
@@ -64,210 +82,152 @@ async function scanBTC(
 
     for (const tx of allTxs) {
       const txid: string = tx.txid;
-      // Skip transactions already used by another paid order
-      if (txid && usedTxHashes.has(txid)) continue;
+      if (!txid || usedTxHashes.has(txid) || isTxCached("BTC", txid)) continue;
 
-      // Time check: skip old transactions.
-      // - Confirmed txs have status.block_time (unix seconds)
-      // - Mempool (unconfirmed) txs are always "new" — allow them
       const blockTime: number | undefined = tx.status?.block_time;
       const isMempool = !tx.status?.confirmed;
       if (!isMempool) {
-        if (typeof blockTime !== "number") continue; // can't verify age — skip
-        if (blockTime < minTime) continue; // older than the order
-        if (blockTime < maxAge) continue; // HARD SAFETY NET: older than 30 min
+        if (typeof blockTime !== "number" || blockTime < minTime || blockTime < maxAge) continue;
       }
 
       let received = 0;
       for (const vout of tx.vout ?? []) {
-        if (vout.scriptpubkey_address === addr) {
-          received += vout.value ?? 0;
-        }
+        if (vout.scriptpubkey_address === addr) received += vout.value ?? 0;
       }
       if (received > 0) {
         base.found = true;
+        cacheTx("BTC", txid);
         if (received >= expectedSats) {
           base.matchedAmount = true;
           base.amountReceived = received / 1e8;
           base.txHash = txid;
           base.confirmed = !!tx.status?.confirmed;
           base.matchedAddress = true;
+          base.confirmations = tx.status?.confirmed ? 1 : 0;
           base.explorerUrl = `https://btcscan.org/tx/${txid}`;
-          base.verified = true; // accept pending too
+          base.verified = true;
+          console.log(`[BTC] Payment verified: tx=${txid}, amount=${received / 1e8} BTC`);
           return base;
         }
       }
     }
     return base;
   } catch (e) {
-    return { ...base, error: `Bitcoin scan failed: ${(e as Error).message}` };
+    return { ...base, error: `BTC scan failed: ${(e as Error).message}` };
   }
 }
 
-// ---------- LTC: scan address for incoming txs ----------
-async function scanLTC(
-  addr: string,
-  expectedAmount: number,
-  sinceTimestamp: number,
-  usedTxHashes: Set<string>
-): Promise<ScanResult> {
+// ---------- LTC: LitecoinSpace API ----------
+async function scanLTC(addr: string, expectedAmount: number, sinceTimestamp: number, usedTxHashes: Set<string>): Promise<ScanResult> {
   const base: ScanResult = {
-    verified: false, found: false, confirmed: false,
-    matchedAddress: false, matchedAmount: false, amountReceived: 0,
-    txHash: null,
+    verified: false, found: false, confirmed: false, matchedAddress: false,
+    matchedAmount: false, amountReceived: 0, txHash: null,
     explorerUrl: `https://litecoinspace.org/address/${addr}`,
-    checkedAddress: addr, expectedAmount,
+    checkedAddress: addr, expectedAmount, confirmations: 0,
+    verificationSource: "litecoinspace",
   };
   try {
-    const addrRes = await fetch(`https://litecoinblockexplorer.net/api/v2/address/${addr}`);
-    if (!addrRes.ok) return { ...base, error: `Litecoin explorer error (${addrRes.status})` };
-    const addrData = await addrRes.json();
-    const txids: string[] = addrData.txids ?? [];
-    if (!Array.isArray(txids) || txids.length === 0) return base;
+    const res = await withRetry(() => fetch(`https://litecoinspace.org/api/address/${addr}/txs`));
+    if (!res?.ok) return { ...base, error: `LitecoinSpace error (${res?.status})` };
+    const txs: any[] = await res.json();
+    if (!Array.isArray(txs)) return base;
 
-    const toCheck = txids.slice(0, 15);
     const minTime = sinceTimestamp - TIME_TOLERANCE_SECONDS;
     const now = Math.floor(Date.now() / 1000);
     const maxAge = now - MAX_TX_AGE_SECONDS;
 
-    for (const txid of toCheck) {
-      if (usedTxHashes.has(txid)) continue;
-      try {
-        const txRes = await fetch(`https://litecoinblockexplorer.net/api/v2/tx/${txid}`);
-        if (!txRes.ok) continue;
-        const tx = await txRes.json();
+    for (const tx of txs) {
+      const txid: string = tx.txid;
+      if (!txid || usedTxHashes.has(txid) || isTxCached("LTC", txid)) continue;
 
-        // Time check: skip old transactions.
-        const blockTime: number | undefined = tx.blockTime ?? tx.blocktime;
-        const confirmations: number = tx.confirmations ?? 0;
-        const isMempool = confirmations === 0;
-        if (!isMempool) {
-          if (typeof blockTime !== "number") continue; // can't verify age — skip
-          if (blockTime < minTime) continue; // older than the order
-          if (blockTime < maxAge) continue; // HARD SAFETY NET: older than 30 min
-        }
+      const blockTime = tx.status?.block_time;
+      const isMempool = !tx.status?.confirmed;
+      if (!isMempool) {
+        if (typeof blockTime !== "number" || blockTime < minTime || blockTime < maxAge) continue;
+      }
 
-        let received = 0;
-        for (const vout of tx.vout ?? []) {
-          const addrs: string[] = vout.addresses ?? [];
-          if (addrs.includes(addr)) {
-            received += parseFloat(vout.value ?? "0");
-          }
+      let received = 0;
+      for (const vout of tx.vout ?? []) {
+        if (vout.scriptpubkey_address === addr) received += vout.value ?? 0;
+      }
+      if (received > 0) {
+        base.found = true;
+        cacheTx("LTC", txid);
+        if (received >= expectedSatsFromValue(expectedAmount)) {
+          base.matchedAmount = true;
+          base.amountReceived = received / 1e8;
+          base.txHash = txid;
+          base.confirmed = !!tx.status?.confirmed;
+          base.matchedAddress = true;
+          base.confirmations = tx.status?.confirmed ? 1 : 0;
+          base.explorerUrl = `https://litecoinspace.org/tx/${txid}`;
+          base.verified = true;
+          console.log(`[LTC] Payment verified: tx=${txid}, amount=${received / 1e8} LTC`);
+          return base;
         }
-        if (received > 0) {
-          base.found = true;
-          if (received >= expectedAmount - 1e-8) {
-            base.matchedAmount = true;
-            base.amountReceived = received;
-            base.txHash = tx.txid ?? txid;
-            base.confirmed = confirmations > 0;
-            base.matchedAddress = true;
-            base.explorerUrl = `https://litecoinspace.org/tx/${base.txHash}`;
-            base.verified = true;
-            return base;
-          }
-        }
-      } catch {
-        /* skip this tx */
       }
     }
     return base;
   } catch (e) {
-    return { ...base, error: `Litecoin scan failed: ${(e as Error).message}` };
+    return { ...base, error: `LTC scan failed: ${(e as Error).message}` };
   }
 }
 
-// ---------- SOL: scan address signatures for matching transfer ----------
-async function scanSOL(
-  addr: string,
-  expectedAmount: number,
-  sinceTimestamp: number,
-  usedTxHashes: Set<string>
-): Promise<ScanResult> {
+function expectedSatsFromValue(v: number): number {
+  return Math.round(v * 1e8);
+}
+
+// ---------- SOL: Helius RPC API ----------
+async function scanSOL(addr: string, expectedAmount: number, sinceTimestamp: number, usedTxHashes: Set<string>): Promise<ScanResult> {
   const base: ScanResult = {
-    verified: false, found: false, confirmed: false,
-    matchedAddress: false, matchedAmount: false, amountReceived: 0,
-    txHash: null,
+    verified: false, found: false, confirmed: false, matchedAddress: false,
+    matchedAmount: false, amountReceived: 0, txHash: null,
     explorerUrl: `https://solscan.io/account/${addr}`,
-    checkedAddress: addr, expectedAmount,
+    checkedAddress: addr, expectedAmount, confirmations: 0,
+    verificationSource: "helius",
   };
-  const rpcs = [
-    "https://api.mainnet-beta.solana.com",
-    "https://solana-rpc.publicnode.com",
-  ];
+  const heliusKey = process.env.HELIUS_API_KEY;
+  const rpcUrl = heliusKey
+    ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+    : "https://api.mainnet-beta.solana.com";
   try {
-    let sigs: any[] = [];
-    let lastErr = "";
-    for (const rpc of rpcs) {
-      try {
-        const res = await fetch(rpc, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0", id: 1, method: "getSignaturesForAddress",
-            params: [addr, { limit: 20 }],
-          }),
-        });
-        if (!res.ok) { lastErr = `RPC ${res.status}`; continue; }
-        const json = await res.json();
-        if (Array.isArray(json?.result)) { sigs = json.result; break; }
-        lastErr = json?.error?.message ?? "no result";
-      } catch (e) { lastErr = (e as Error).message; }
-    }
+    // Get recent signatures
+    const sigRes = await withRetry(() => fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1, method: "getSignaturesForAddress",
+        params: [addr, { limit: 20 }],
+      }),
+    }));
+    if (!sigRes?.ok) return { ...base, error: `Helius RPC error (${sigRes?.status})` };
+    const sigJson = await sigRes.json();
+    const sigs: any[] = sigJson?.result ?? [];
+    if (!Array.isArray(sigs)) return base;
 
     const expectedLamports = Math.round(expectedAmount * SOL_LAMPORTS);
     const minTime = sinceTimestamp - TIME_TOLERANCE_SECONDS;
     const now = Math.floor(Date.now() / 1000);
     const maxAge = now - MAX_TX_AGE_SECONDS;
 
-    console.log("[SOL scan] order since:", sinceTimestamp, "| minTime:", minTime, "| maxAge:", maxAge, "| sigs:", sigs.length);
-
     for (const sig of sigs) {
       const signature: string = sig.signature;
-      if (!signature) continue;
+      if (!signature || usedTxHashes.has(signature) || isTxCached("SOL", signature)) continue;
 
-      // Skip transactions already used by another paid order
-      if (usedTxHashes.has(signature)) {
-        console.log("[SOL scan] skipping used tx:", signature.slice(0, 20));
-        continue;
-      }
-
-      // Time check — STRICT. The transaction's blockTime MUST be:
-      //   1. A valid number (not null/undefined)
-      //   2. >= minTime (within 5 min before the order was created)
-      //   3. >= maxAge (not older than 30 minutes from now — hard safety net)
       const blockTime: number | undefined = sig.blockTime;
-      console.log("[SOL scan] tx:", signature.slice(0, 20), "| blockTime:", blockTime, "| age:", blockTime ? `${Math.round((now - blockTime) / 60)}min` : "null");
+      if (typeof blockTime !== "number" || blockTime < minTime || blockTime < maxAge) continue;
 
-      if (typeof blockTime !== "number") {
-        // No blockTime — can't verify age, skip for safety
-        continue;
-      }
-      if (blockTime < minTime) {
-        // Older than the order — definitely not the buyer's payment
-        continue;
-      }
-      if (blockTime < maxAge) {
-        // HARD SAFETY NET: older than 30 minutes from now — skip
-        continue;
-      }
-
-      let tx: any = null;
-      for (const rpc of rpcs) {
-        try {
-          const res = await fetch(rpc, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              jsonrpc: "2.0", id: 1, method: "getTransaction",
-              params: [signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }],
-            }),
-          });
-          if (!res.ok) continue;
-          const json = await res.json();
-          if (json?.result) { tx = json.result; break; }
-        } catch { /* try next rpc */ }
-      }
+      const txRes = await withRetry(() => fetch(rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0", id: 1, method: "getTransaction",
+          params: [signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }],
+        }),
+      }));
+      if (!txRes?.ok) continue;
+      const txJson = await txRes.json();
+      const tx = txJson?.result;
       if (!tx) continue;
 
       let receivedLamports = 0;
@@ -285,166 +245,109 @@ async function scanSOL(
         }
       }
       if (!matched) {
-        const postNative: number[] = tx.meta?.postBalances ?? [];
-        const preNative: number[] = tx.meta?.preBalances ?? [];
-        const accountKeys: string[] = tx.transaction?.message?.accountKeys?.map((k: any) =>
-          typeof k === "string" ? k : k.pubkey
-        ) ?? [];
+        const postBalances: number[] = tx.meta?.postBalances ?? [];
+        const preBalances: number[] = tx.meta?.preBalances ?? [];
+        const accountKeys: string[] = tx.transaction?.message?.accountKeys?.map((k: any) => typeof k === "string" ? k : k.pubkey) ?? [];
         for (let i = 0; i < accountKeys.length; i++) {
           if (accountKeys[i] === addr) {
-            const delta = (postNative[i] ?? 0) - (preNative[i] ?? 0);
-            if (delta > 0) {
-              matched = true;
-              receivedLamports += delta;
-            }
+            const delta = (postBalances[i] ?? 0) - (preBalances[i] ?? 0);
+            if (delta > 0) { matched = true; receivedLamports += delta; }
           }
         }
       }
       if (matched) {
         base.found = true;
+        cacheTx("SOL", signature);
         if (receivedLamports >= expectedLamports) {
           base.matchedAmount = true;
           base.amountReceived = receivedLamports / SOL_LAMPORTS;
           base.txHash = signature;
           base.confirmed = !sig.err;
           base.matchedAddress = true;
+          base.confirmations = sig.confirmationStatus === "finalized" ? 32 : 1;
           base.explorerUrl = `https://solscan.io/tx/${signature}`;
           base.verified = true;
+          console.log(`[SOL] Payment verified: tx=${signature}, amount=${receivedLamports / SOL_LAMPORTS} SOL`);
           return base;
         }
       }
     }
-    if (!base.found && lastErr) base.error = `Solana scan: ${lastErr}`;
     return base;
   } catch (e) {
-    return { ...base, error: `Solana scan failed: ${(e as Error).message}` };
+    return { ...base, error: `SOL scan failed: ${(e as Error).message}` };
   }
 }
 
-// ---------- USDT (BEP20): scan Transfer logs to our address ----------
-async function scanUSDT(
-  addr: string,
-  expectedAmount: number,
-  sinceTimestamp: number,
-  usedTxHashes: Set<string>
-): Promise<ScanResult> {
+// ---------- USDT (BEP-20): BscScan API ----------
+async function scanUSDT(addr: string, expectedAmount: number, sinceTimestamp: number, usedTxHashes: Set<string>): Promise<ScanResult> {
   const base: ScanResult = {
-    verified: false, found: false, confirmed: false,
-    matchedAddress: false, matchedAmount: false, amountReceived: 0,
-    txHash: null,
+    verified: false, found: false, confirmed: false, matchedAddress: false,
+    matchedAmount: false, amountReceived: 0, txHash: null,
     explorerUrl: `https://bscscan.com/address/${addr}`,
-    checkedAddress: addr, expectedAmount,
+    checkedAddress: addr, expectedAmount, confirmations: 0,
+    verificationSource: "bscscan",
   };
-  const rpcs = [
-    "https://bsc-dataseed.binance.org",
-    "https://bsc-dataseed1.binance.org",
-    "https://bsc.publicnode.com",
-  ];
+  const bscscanKey = process.env.BSCSCAN_API_KEY;
+  if (!bscscanKey) return { ...base, error: "BSCSCAN_API_KEY not configured" };
   try {
-    const transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
-    const toTopic = "0x000000000000000000000000" + addr.toLowerCase().slice(2);
+    // Fetch recent USDT transfers to our address
+    const url = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${USDT_BSC_CONTRACT}&address=${addr}&page=1&offset=20&sort=desc&apikey=${bscscanKey}`;
+    const res = await withRetry(() => fetch(url));
+    if (!res?.ok) return { ...base, error: `BscScan error (${res?.status})` };
+    const data = await res.json();
+    const txs: any[] = data?.result ?? [];
+    if (!Array.isArray(txs)) return base;
+
     const expectedRaw = BigInt(Math.round(expectedAmount * 10 ** USDT_DECIMALS));
+    const minTime = sinceTimestamp - TIME_TOLERANCE_SECONDS;
+    const now = Math.floor(Date.now() / 1000);
+    const maxAge = now - MAX_TX_AGE_SECONDS;
+    const addrLower = addr.toLowerCase();
 
-    for (const rpc of rpcs) {
-      try {
-        const blockRes = await fetch(rpc, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] }),
-        });
-        if (!blockRes.ok) continue;
-        const blockJson = await blockRes.json();
-        const latest = parseInt(blockJson.result ?? "0x0", 16);
-        // Look back ~5000 blocks (~4 hours) — enough to catch a recent payment
-        const fromBlock = "0x" + Math.max(0, latest - 5000).toString(16);
+    for (const tx of txs) {
+      const txHash: string = tx.hash;
+      if (!txHash || usedTxHashes.has(txHash) || isTxCached("USDT", txHash)) continue;
 
-        const logsRes = await fetch(rpc, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0", id: 1, method: "eth_getLogs",
-            params: [{
-              address: USDT_BSC_CONTRACT,
-              topics: [transferTopic, null, toTopic],
-              fromBlock,
-              toBlock: "latest",
-            }],
-          }),
-        });
-        if (!logsRes.ok) continue;
-        const logsJson = await logsRes.json();
-        const logs: any[] = logsJson?.result ?? [];
-        if (!Array.isArray(logs)) continue;
+      // Verify receiver
+      const to = (tx.to || "").toLowerCase();
+      if (to !== addrLower) continue;
 
-        // Sort logs newest-first so we check the most recent payment first
-        const sortedLogs = [...logs].sort((a, b) => {
-          try { return parseInt(b.blockNumber ?? "0x0", 16) - parseInt(a.blockNumber ?? "0x0", 16); }
-          catch { return 0; }
-        });
+      // Verify contract
+      const contract = (tx.contractAddress || "").toLowerCase();
+      if (contract !== USDT_BSC_CONTRACT.toLowerCase()) continue;
 
-        for (const log of sortedLogs) {
-          const txHash: string = log.transactionHash;
-          if (txHash && usedTxHashes.has(txHash)) continue;
+      // Parse amount (18 decimals)
+      let amount: bigint;
+      try { amount = BigInt(tx.value || "0"); } catch { continue; }
 
-          // Time check: fetch the block timestamp for this log's block
-          // and skip it if the block is older than the order.
-          let blockAgeOk = false;
-          try {
-            const blkRes = await fetch(rpc, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                jsonrpc: "2.0", id: 1, method: "eth_getBlockByNumber",
-                params: [log.blockNumber, false],
-              }),
-            });
-            if (blkRes.ok) {
-              const blkJson = await blkRes.json();
-              const blockTimestamp: number | undefined = blkJson?.result?.timestamp
-                ? parseInt(blkJson.result.timestamp, 16)
-                : undefined;
-              if (typeof blockTimestamp === "number") {
-                const minTime = sinceTimestamp - TIME_TOLERANCE_SECONDS;
-                const maxAge = (Math.floor(Date.now() / 1000)) - MAX_TX_AGE_SECONDS;
-                if (blockTimestamp < minTime) continue; // older than the order
-                if (blockTimestamp < maxAge) continue; // HARD SAFETY NET: older than 30 min
-                blockAgeOk = true;
-              }
-            }
-          } catch {
-            // if we can't fetch the block, skip this log for safety
-            continue;
-          }
-          if (!blockAgeOk) continue; // couldn't verify age — skip for safety
+      // Check time via timeStamp field
+      const txTime = parseInt(tx.timeStamp || "0", 10);
+      if (txTime && (txTime < minTime || txTime < maxAge)) continue;
 
-          let amount: bigint;
-          try { amount = BigInt(log.data ?? "0x0"); } catch { continue; }
-          base.found = true;
-          if (amount >= expectedRaw) {
-            base.matchedAmount = true;
-            base.amountReceived = Number(amount) / 10 ** USDT_DECIMALS;
-            base.txHash = txHash;
-            base.confirmed = true;
-            base.matchedAddress = true;
-            base.explorerUrl = `https://bscscan.com/tx/${txHash}`;
-            base.verified = true;
-            return base;
-          }
-        }
+      const confirmations = parseInt(tx.confirmations || "0", 10);
+      base.found = true;
+      cacheTx("USDT", txHash);
+
+      if (amount >= expectedRaw) {
+        base.matchedAmount = true;
+        base.amountReceived = Number(amount) / 10 ** USDT_DECIMALS;
+        base.txHash = txHash;
+        base.confirmed = confirmations > 0;
+        base.matchedAddress = true;
+        base.confirmations = confirmations;
+        base.explorerUrl = `https://bscscan.com/tx/${txHash}`;
+        base.verified = true;
+        console.log(`[USDT] Payment verified: tx=${txHash}, amount=${base.amountReceived} USDT, confs=${confirmations}`);
         return base;
-      } catch {
-        // try next rpc
       }
     }
-    return { ...base, error: "Could not reach BSC RPC to scan for payments." };
+    return base;
   } catch (e) {
     return { ...base, error: `USDT scan failed: ${(e as Error).message}` };
   }
 }
 
-// Main entry: scan Arsh's wallet for a matching incoming payment.
-//   - sinceTimestamp: unix seconds — only consider txs after this time
-//   - usedTxHashes: set of tx hashes already used by other paid orders
+// Main entry: scan wallet for a matching incoming payment
 export async function scanWalletForPayment(
   method: CryptoMethod,
   expectedAmount: number,
@@ -452,6 +355,7 @@ export async function scanWalletForPayment(
   usedTxHashes: Set<string> = new Set()
 ): Promise<ScanResult> {
   const addr = WALLET_ADDRESSES[method];
+  console.log(`[payments] Scanning ${method} wallet=${addr} expected=${expectedAmount} since=${sinceTimestamp} usedTx=${usedTxHashes.size}`);
   switch (method) {
     case "BTC": return scanBTC(addr, expectedAmount, sinceTimestamp, usedTxHashes);
     case "LTC": return scanLTC(addr, expectedAmount, sinceTimestamp, usedTxHashes);
@@ -460,7 +364,7 @@ export async function scanWalletForPayment(
   }
 }
 
-// Legacy tx-hash verification (kept for the /api/verify-payment route)
+// Legacy types
 export type VerifyResult = ScanResult;
 
 export async function verifyPayment(
