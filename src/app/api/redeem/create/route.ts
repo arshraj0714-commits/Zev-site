@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getTokenFromRequest, verifyToken } from "@/lib/auth";
 
 // POST /api/redeem/create — admin creates a new redeem code
+// Fields: code, description, rewardType, rewardName, rewardLink, discountPct, maxUses, expiresAt
 export async function POST(req: NextRequest) {
   try {
     const token = getTokenFromRequest(req);
@@ -11,7 +12,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
-    const { code, description, rewardType, rewardId, rewardName, maxUses, expiresAt } = await req.json();
+    const {
+      code, description, rewardType, rewardName, rewardLink, discountPct, maxUses, expiresAt,
+    } = await req.json();
+
     if (!code) return NextResponse.json({ error: "Code is required" }, { status: 400 });
     if (!rewardType) return NextResponse.json({ error: "Reward type is required" }, { status: 400 });
 
@@ -23,13 +27,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "A code with this name already exists" }, { status: 409 });
     }
 
+    // Validate discount percentage
+    let discount: number | null = null;
+    if (discountPct !== undefined && discountPct !== null && discountPct !== "") {
+      discount = Number(discountPct);
+      if (isNaN(discount) || discount < 0 || discount > 100) {
+        return NextResponse.json({ error: "Discount must be between 0 and 100" }, { status: 400 });
+      }
+    }
+
     const redeemCode = await db.redeemCode.create({
       data: {
         code: codeUpper,
         description: description || null,
         rewardType,
-        rewardId: rewardId || null,
         rewardName: rewardName || null,
+        rewardLink: rewardLink || null,
+        discountPct: discount,
         maxUses: Number(maxUses) || 1,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         active: true,

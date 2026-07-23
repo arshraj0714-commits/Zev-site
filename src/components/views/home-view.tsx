@@ -368,10 +368,13 @@ function RedeemBanners() {
                   <Gift className="h-5 w-5 text-gold" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <code className="font-mono text-sm font-bold text-gold">{c.code}</code>
-                    <span className="text-xs text-muted-foreground">{c.rewardName || c.description}</span>
+                    {c.discountPct ? (
+                      <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-glow">{c.discountPct}% OFF</span>
+                    ) : null}
                   </div>
+                  <span className="block text-xs text-foreground mt-0.5">{c.rewardName || c.description}</span>
                   <div className="mt-1 text-xs text-muted-foreground">
                     {remaining} use{remaining !== 1 ? "s" : ""} left
                     {c.expiresAt && ` · expires ${new Date(c.expiresAt).toLocaleDateString()}`}

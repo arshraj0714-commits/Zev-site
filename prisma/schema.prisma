@@ -113,18 +113,20 @@ model User {
 
 // Redeem codes (created by admin, redeemed by users)
 model RedeemCode {
-  id          String    @id @default(cuid())
-  code        String    @unique
-  description String?
-  rewardType  String    // "product" | "stock" | "discount"
-  rewardId    String?   // product or stock ID to give for free
-  rewardName  String?   // display name of the reward
-  maxUses     Int       @default(1)
-  usesCount   Int       @default(0)
-  expiresAt   DateTime?
-  active      Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  code          String    @unique
+  description   String?
+  rewardType    String    // "discount" | "product" | "stock" | "link"
+  rewardId      String?   // product or stock ID (for product/stock type)
+  rewardName    String?   // display name of the reward
+  rewardLink    String?   // GitHub link or any URL (for link type / no discount)
+  discountPct   Int?      // discount percentage (0-100), null = no discount
+  maxUses       Int       @default(1)
+  usesCount     Int       @default(0)
+  expiresAt     DateTime?
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([code])
   @@index([active])

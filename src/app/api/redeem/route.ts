@@ -19,6 +19,8 @@ export async function GET(req: NextRequest) {
         description: true,
         rewardType: true,
         rewardName: true,
+        rewardLink: true,
+        discountPct: true,
         maxUses: true,
         usesCount: true,
         expiresAt: true,
@@ -73,23 +75,48 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Deliver the reward
+    // Build the delivered content based on reward type
     let deliveredContent = "";
-    if (redeemCode.rewardType === "product" && redeemCode.rewardId) {
+    const rewardName = redeemCode.rewardName || redeemCode.description || "Reward";
+
+    if (redeemCode.discountPct && redeemCode.discountPct > 0) {
+      // Discount code
+      deliveredContent = `🎁 Code Redeemed: ${redeemCode.code}\n\n` +
+        `Reward: ${rewardName}\n` +
+        `Discount: ${redeemCode.discountPct}% off your next order!\n\n` +
+        `Use this code at checkout to get ${redeemCode.discountPct}% off any product.\n\n` +
+        `Thank you for using Zev!`;
+    } else if (redeemCode.rewardLink) {
+      // Link reward (GitHub repo, external URL, etc.)
+      deliveredContent = `🎁 Code Redeemed: ${redeemCode.code}\n\n` +
+        `Reward: ${rewardName}\n\n` +
+        `Access Link: ${redeemCode.rewardLink}\n\n` +
+        `Thank you for using Zev!`;
+    } else if (redeemCode.rewardType === "product" && redeemCode.rewardId) {
+      // Product reward — give the product's code link
       const p = await db.product.findUnique({ where: { id: redeemCode.rewardId } });
       if (p) {
         deliveredContent = p.codeLink
-          ? `🎁 Redeemed: ${p.name}\nCode Link: ${p.codeLink}\n\nThank you for using Zev!`
-          : `🎁 Redeemed: ${p.name}\n\nContact support if you need access.`;
+          ? `🎁 Code Redeemed: ${redeemCode.code}\n\nReward: ${p.name}\nCode Link: ${p.codeLink}\n\nThank you for using Zev!`
+          : `🎁 Code Redeemed: ${redeemCode.code}\n\nReward: ${p.name}\n\nContact support if you need access.`;
+      } else {
+        deliveredContent = `🎁 Code Redeemed: ${redeemCode.code}\n\nReward: ${rewardName}\n\nThank you for using Zev!`;
       }
     } else if (redeemCode.rewardType === "stock" && redeemCode.rewardId) {
+      // Stock reward — give credentials
       const s = await db.stockItem.findUnique({ where: { id: redeemCode.rewardId } });
       if (s) {
         const creds = formatCredentials(s.credentials);
-        deliveredContent = `🎁 Redeemed: ${s.name}\n\n--- CREDENTIALS ---\n${creds}\n\nStore these safely!`;
+        deliveredContent = `🎁 Code Redeemed: ${redeemCode.code}\n\nReward: ${s.name}\n\n--- CREDENTIALS ---\n${creds}\n\nStore these safely!`;
+      } else {
+        deliveredContent = `🎁 Code Redeemed: ${redeemCode.code}\n\nReward: ${rewardName}\n\nThank you for using Zev!`;
       }
     } else {
-      deliveredContent = `🎁 Code redeemed successfully!\n\nReward: ${redeemCode.rewardName || "Special bonus"}\n\nThank you for using Zev!`;
+      // Generic reward (just description)
+      deliveredContent = `🎁 Code Redeemed: ${redeemCode.code}\n\n` +
+        `Reward: ${rewardName}\n` +
+        (redeemCode.description ? `\n${redeemCode.description}\n` : "") +
+        `\nThank you for using Zev!`;
     }
 
     // Create an order record for this redemption
@@ -97,7 +124,7 @@ export async function POST(req: NextRequest) {
       data: {
         orderNumber: `ZEV-REDEEM-${Date.now().toString(36).toUpperCase()}`,
         itemType: "product",
-        itemName: `Redeemed: ${redeemCode.rewardName || redeemCode.description || "Reward"}`,
+        itemName: `Redeemed: ${rewardName}`,
         amount: 0,
         paymentMethod: "REDEEM",
         cryptoAmount: 0,
@@ -109,7 +136,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      reward: redeemCode.rewardName || redeemCode.description || "Reward",
+      reward: rewardName,
+      discountPct: redeemCode.discountPct || 0,
+      rewardLink: redeemCode.rewardLink || null,
       delivered: deliveredContent,
       message: "Code redeemed successfully!",
     });

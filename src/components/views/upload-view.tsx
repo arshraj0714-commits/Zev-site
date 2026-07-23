@@ -578,7 +578,10 @@ export function UploadView() {
 function RedeemCodesSection() {
   const qc = useQueryClient();
   const [newCode, setNewCode] = useState("");
+  const [newRewardName, setNewRewardName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newLink, setNewLink] = useState("");
+  const [newDiscount, setNewDiscount] = useState("");
   const [newMax, setNewMax] = useState("1");
   const [newExpiry, setNewExpiry] = useState("");
   const [saving, setSaving] = useState(false);
@@ -597,17 +600,24 @@ function RedeemCodesSection() {
   async function createCode(e: React.FormEvent) {
     e.preventDefault();
     if (!newCode) { toast.error("Code is required"); return; }
+    if (!newRewardName) { toast.error("Reward name is required"); return; }
     setSaving(true);
     try {
       const token = JSON.parse(localStorage.getItem("zev-auth") || "{}").token;
+      // Determine reward type
+      let rewardType = "link";
+      if (newDiscount) rewardType = "discount";
+
       const res = await fetch("/api/redeem/create", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           code: newCode,
           description: newDesc,
-          rewardType: "discount",
-          rewardName: newDesc || "Special Reward",
+          rewardType,
+          rewardName: newRewardName,
+          rewardLink: newLink || null,
+          discountPct: newDiscount || null,
           maxUses: Number(newMax) || 1,
           expiresAt: newExpiry || null,
         }),
@@ -617,7 +627,7 @@ function RedeemCodesSection() {
         throw new Error(d.error || "Failed");
       }
       toast.success("Redeem code created!");
-      setNewCode(""); setNewDesc(""); setNewMax("1"); setNewExpiry("");
+      setNewCode(""); setNewRewardName(""); setNewDesc(""); setNewLink(""); setNewDiscount(""); setNewMax("1"); setNewExpiry("");
       qc.invalidateQueries({ queryKey: ["admin-redeem-codes"] });
       qc.invalidateQueries({ queryKey: ["redeem-codes"] });
     } catch (e) {
@@ -645,12 +655,42 @@ function RedeemCodesSection() {
       </h4>
 
       {/* Create form */}
-      <form onSubmit={createCode} className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <Input value={newCode} onChange={(e) => setNewCode(e.target.value.toUpperCase())} className="glass text-sm font-mono" placeholder="CODE" />
-        <Input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} className="glass text-sm" placeholder="Reward / description" />
-        <Input type="number" value={newMax} onChange={(e) => setNewMax(e.target.value)} className="glass text-sm" placeholder="Max uses" />
-        <Input type="datetime-local" value={newExpiry} onChange={(e) => setNewExpiry(e.target.value)} className="glass text-sm" />
-        <Button type="submit" disabled={saving} className="sm:col-span-2 lg:col-span-4 gap-2 bg-gradient-to-r from-gold to-amber-400 text-black text-sm">
+      <form onSubmit={createCode} className="mb-4 space-y-2">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1">Code *</Label>
+            <Input value={newCode} onChange={(e) => setNewCode(e.target.value.toUpperCase())} className="glass text-sm font-mono" placeholder="SUMMER2025" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1">Reward Name *</Label>
+            <Input value={newRewardName} onChange={(e) => setNewRewardName(e.target.value)} className="glass text-sm" placeholder="e.g. 10% off or Free Bot Access" />
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1">Discount % (leave empty = no discount)</Label>
+            <Input type="number" min="0" max="100" value={newDiscount} onChange={(e) => setNewDiscount(e.target.value)} className="glass text-sm" placeholder="e.g. 10 (for 10% off)" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1">Reward Link (GitHub/URL, if no discount)</Label>
+            <Input value={newLink} onChange={(e) => setNewLink(e.target.value)} className="glass text-sm" placeholder="https://github.com/..." />
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1">Description (optional)</Label>
+          <Input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} className="glass text-sm" placeholder="Short description of the reward" />
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1">Max Uses</Label>
+            <Input type="number" value={newMax} onChange={(e) => setNewMax(e.target.value)} className="glass text-sm" placeholder="1" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1">Expiry Date (optional)</Label>
+            <Input type="datetime-local" value={newExpiry} onChange={(e) => setNewExpiry(e.target.value)} className="glass text-sm" />
+          </div>
+        </div>
+        <Button type="submit" disabled={saving} className="w-full gap-2 bg-gradient-to-r from-gold to-amber-400 text-black text-sm">
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Create Code
         </Button>
       </form>
@@ -660,14 +700,21 @@ function RedeemCodesSection() {
         {codes.map((c: any) => (
           <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
             <div className="min-w-0 flex-1">
-              <code className="font-mono font-bold text-gold">{c.code}</code>
-              <span className="ml-2 text-xs text-muted-foreground">{c.rewardName || c.description}</span>
+              <div className="flex items-center gap-2">
+                <code className="font-mono font-bold text-gold">{c.code}</code>
+                <span className="text-xs text-foreground truncate">{c.rewardName}</span>
+                {c.discountPct ? (
+                  <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-glow">{c.discountPct}% off</span>
+                ) : c.rewardLink ? (
+                  <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] text-blue-300">link</span>
+                ) : null}
+              </div>
               <div className="text-xs text-muted-foreground">
                 {c.usesCount}/{c.maxUses} used · {c.active ? "active" : "inactive"}
                 {c.expiresAt && ` · exp ${new Date(c.expiresAt).toLocaleDateString()}`}
               </div>
             </div>
-            <button onClick={() => deleteCode(c.id)} className="text-muted-foreground hover:text-rose-400">
+            <button onClick={() => deleteCode(c.id)} className="text-muted-foreground hover:text-rose-400 shrink-0">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
