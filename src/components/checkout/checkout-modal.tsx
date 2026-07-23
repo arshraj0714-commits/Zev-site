@@ -58,6 +58,29 @@ export function CheckoutModal() {
 
   const target = checkoutTarget;
   const isFree = target?.price === 0;
+
+  // Check for stored discount from redeemed codes
+  const [discountPct, setDiscountPct] = useState(0);
+  const [discountCode, setDiscountCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("zev-discount");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.pct > 0) {
+          setDiscountPct(parsed.pct);
+          setDiscountCode(parsed.code || null);
+        }
+      }
+    } catch {}
+  }, [checkoutOpen]);
+
+  // Calculate discounted price
+  const originalPrice = target?.price || 0;
+  const discountedPrice = discountPct > 0 ? originalPrice * (1 - discountPct / 100) : originalPrice;
+  const effectivePrice = isFree ? 0 : discountedPrice;
+
   const methods = pricesData?.methods ?? [];
   const prices = pricesData?.prices ?? {};
   const selectedMethod = methods.find((m) => m.id === method);
@@ -103,6 +126,7 @@ export function CheckoutModal() {
           paymentMethod: method,
           buyerEmail: email || undefined,
           buyerDiscord: discord || undefined,
+          discountCode: discountCode || undefined,
         }),
       });
       const data = await safeJson(res);
@@ -149,6 +173,10 @@ export function CheckoutModal() {
           setEmailSent(!!data.emailSent);
           setStep("success");
           toast.success("Payment detected! 🎉");
+          // Clear discount after successful purchase
+          localStorage.removeItem("zev-discount");
+          setDiscountPct(0);
+          setDiscountCode(null);
           return;
         }
         if (data.found) {
@@ -280,14 +308,26 @@ export function CheckoutModal() {
 
                   {!isFree && selectedMethod && (
                     <div className="rounded-lg bg-accent/20 p-3 text-sm">
+                      {discountPct > 0 && (
+                        <div className="flex justify-between mb-1 text-xs">
+                          <span className="text-muted-foreground">Original Price</span>
+                          <span className="text-muted-foreground line-through">${originalPrice.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {discountPct > 0 && (
+                        <div className="flex justify-between mb-1 text-xs">
+                          <span className="text-emerald-glow">Discount ({discountPct}%)</span>
+                          <span className="text-emerald-glow">-${(originalPrice - discountedPrice).toFixed(2)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Total</span>
+                        <span className="text-muted-foreground">{discountPct > 0 ? "Discounted Total" : "Total"}</span>
                         <span className="font-bold text-gold">
-                          {(target.price / (prices[method] || 1)).toFixed(method === "BTC" || method === "LTC" ? 6 : 4)} {method}
+                          {(effectivePrice / (prices[method] || 1)).toFixed(method === "BTC" || method === "LTC" ? 6 : 4)} {method}
                         </span>
                       </div>
                       <div className="mt-0.5 flex justify-between text-xs text-muted-foreground">
-                        <span>= ${target.price.toFixed(2)} USD</span>
+                        <span>= ${effectivePrice.toFixed(2)} USD</span>
                         <span>1 {method} = ${(prices[method] ?? 0).toFixed(2)}</span>
                       </div>
                     </div>

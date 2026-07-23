@@ -51,14 +51,26 @@ export async function POST(req: NextRequest) {
     if (!redeemCode) {
       return NextResponse.json({ error: "Invalid code" }, { status: 404 });
     }
+    // Check if THIS user already redeemed this code
+    const alreadyRedeemed = await db.order.findFirst({
+      where: {
+        buyerEmail: user.email,
+        paymentMethod: "REDEEM",
+        itemName: { contains: redeemCode.code },
+        status: "paid",
+      },
+    });
+    if (alreadyRedeemed) {
+      return NextResponse.json({ error: "You have already redeemed this code. Each code can only be used once per account." }, { status: 400 });
+    }
     if (!redeemCode.active) {
-      return NextResponse.json({ error: "This code is no longer active" }, { status: 400 });
+      return NextResponse.json({ error: "This code has already been fully redeemed and is no longer active." }, { status: 400 });
     }
     if (redeemCode.usesCount >= redeemCode.maxUses) {
-      return NextResponse.json({ error: "This code has reached its maximum uses" }, { status: 400 });
+      return NextResponse.json({ error: "This code has reached its maximum uses and can no longer be redeemed." }, { status: 400 });
     }
     if (redeemCode.expiresAt && redeemCode.expiresAt < new Date()) {
-      return NextResponse.json({ error: "This code has expired" }, { status: 400 });
+      return NextResponse.json({ error: "This code has expired." }, { status: 400 });
     }
 
     // Increment use count

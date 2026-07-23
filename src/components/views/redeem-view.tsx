@@ -59,6 +59,18 @@ export function RedeemView() {
       setResult({ success: true, delivered: data.delivered, reward: data.reward });
       toast.success("Code redeemed! 🎁");
       setCode("");
+
+      // If this is a discount code, store it in localStorage for checkout
+      if (data.discountPct && data.discountPct > 0) {
+        localStorage.setItem("zev-discount", JSON.stringify({
+          pct: data.discountPct,
+          code: code.trim().toUpperCase(),
+          reward: data.reward,
+        }));
+        toast.success(`${data.discountPct}% discount stored! It will be applied on your next purchase.`, {
+          duration: 5000,
+        });
+      }
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -150,9 +162,12 @@ export function RedeemView() {
               return (
                 <div key={c.id} className="flex items-center justify-between gap-3 rounded-lg bg-accent/20 px-4 py-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <code className="font-mono font-bold text-gold">{c.code}</code>
-                      <Badge variant="outline" className="text-xs">{c.rewardName || c.rewardType}</Badge>
+                      {c.discountPct ? (
+                        <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-glow">{c.discountPct}% OFF</span>
+                      ) : null}
+                      <span className="text-xs text-foreground truncate">{c.rewardName}</span>
                     </div>
                     {c.description && <p className="mt-0.5 text-xs text-muted-foreground truncate">{c.description}</p>}
                     <div className="mt-0.5 text-xs text-muted-foreground">

@@ -39,7 +39,7 @@ export function generateInvoiceHtml(data: InvoiceData): string {
             </tr>
             <tr>
               <td style="padding:32px 32px 0;text-align:center;">
-                <div style="display:inline-block;width:48px;height:48px;line-height:48px;text-align:center;background:linear-gradient(135deg,#10b981,#f59e0b);border-radius:12px;font-size:24px;font-weight:900;color:#000;letter-spacing:-1px;">Z</div>
+                <img src="https://zevdev.vercel.app/favicon.svg" alt="Zev" style="width:48px;height:48px;border-radius:12px;" />
                 <h1 style="margin:16px 0 4px;font-size:22px;font-weight:800;color:#f0f0f0;">INVOICE</h1>
                 <p style="margin:0;font-size:14px;color:#888;">Order ${data.orderNumber}</p>
               </td>

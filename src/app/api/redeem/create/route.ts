@@ -56,6 +56,64 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// PUT /api/redeem/create?id=xxx — admin edits an existing redeem code
+export async function PUT(req: NextRequest) {
+  try {
+    const token = getTokenFromRequest(req);
+    const user = verifyToken(token);
+    if (!user || user.role !== "admin") {
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "ID is required" }, { status: 400 });
+
+    const body = await req.json();
+    const { code, description, rewardType, rewardName, rewardLink, discountPct, maxUses, expiresAt, active } = body;
+
+    // Check if code already exists (for a different record)
+    if (code) {
+      const codeUpper = code.trim().toUpperCase();
+      const existing = await db.redeemCode.findUnique({ where: { code: codeUpper } });
+      if (existing && existing.id !== id) {
+        return NextResponse.json({ error: "A code with this name already exists" }, { status: 409 });
+      }
+    }
+
+    // Validate discount
+    let discount: number | null = undefined;
+    if (discountPct !== undefined && discountPct !== null && discountPct !== "") {
+      discount = Number(discountPct);
+      if (isNaN(discount) || discount < 0 || discount > 100) {
+        return NextResponse.json({ error: "Discount must be between 0 and 100" }, { status: 400 });
+      }
+    } else if (discountPct === null || discountPct === "") {
+      discount = null;
+    }
+
+    const updateData: any = {};
+    if (code !== undefined) updateData.code = code.trim().toUpperCase();
+    if (description !== undefined) updateData.description = description || null;
+    if (rewardType !== undefined) updateData.rewardType = rewardType;
+    if (rewardName !== undefined) updateData.rewardName = rewardName || null;
+    if (rewardLink !== undefined) updateData.rewardLink = rewardLink || null;
+    if (discount !== undefined) updateData.discountPct = discount;
+    if (maxUses !== undefined) updateData.maxUses = Number(maxUses) || 1;
+    if (expiresAt !== undefined) updateData.expiresAt = expiresAt ? new Date(expiresAt) : null;
+    if (active !== undefined) updateData.active = active;
+
+    const updated = await db.redeemCode.update({
+      where: { id },
+      data: updateData,
+    });
+
+    return NextResponse.json({ redeemCode: updated });
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
+}
+
 // DELETE /api/redeem/create?id=xxx — admin deletes a redeem code
 export async function DELETE(req: NextRequest) {
   try {

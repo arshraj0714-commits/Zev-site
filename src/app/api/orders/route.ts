@@ -112,12 +112,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { itemType, itemId, paymentMethod, buyerEmail, buyerDiscord } = body as {
+    const { itemType, itemId, paymentMethod, buyerEmail, buyerDiscord, discountCode } = body as {
       itemType: "product" | "stock";
       itemId: string;
       paymentMethod: CryptoMethod;
       buyerEmail?: string;
       buyerDiscord?: string;
+      discountCode?: string;
     };
 
     if (!itemType || !itemId || !paymentMethod) {
@@ -153,6 +154,23 @@ export async function POST(req: NextRequest) {
       usdAmount = s.price;
     } else {
       return NextResponse.json({ error: "Invalid itemType" }, { status: 400 });
+    }
+
+    // Apply discount code if provided
+    let appliedDiscountPct = 0;
+    let appliedDiscountCode: string | null = null;
+    if (discountCode && usdAmount > 0) {
+      const dc = await db.redeemCode.findUnique({
+        where: { code: discountCode.trim().toUpperCase() },
+      });
+      if (dc && dc.active && dc.usesCount < dc.maxUses && dc.discountPct && dc.discountPct > 0) {
+        if (!dc.expiresAt || dc.expiresAt > new Date()) {
+          appliedDiscountPct = dc.discountPct;
+          appliedDiscountCode = dc.code;
+          usdAmount = usdAmount * (1 - appliedDiscountPct / 100);
+          console.log(`[orders] Discount applied: ${appliedDiscountPct}% off, new amount: $${usdAmount}`);
+        }
+      }
     }
 
     const cryptoAmount = usdAmount > 0 ? await usdToCrypto(usdAmount, paymentMethod) : 0;

@@ -200,6 +200,7 @@ async function scanSOL(addr: string, expectedAmount: number, sinceTimestamp: num
     "https://api.mainnet-beta.solana.com",
     "https://solana-rpc.publicnode.com",
   ];
+  console.log(`[SOL] API key configured: ${heliusKey ? "YES (Helius primary)" : "NO (using public RPC)"}`);
 
   const expectedLamports = Math.round(expectedAmount * SOL_LAMPORTS);
   const minTime = sinceTimestamp - TIME_TOLERANCE_SECONDS;
@@ -334,6 +335,7 @@ async function scanUSDT(addr: string, expectedAmount: number, sinceTimestamp: nu
 
   // ---- TIER 1: BscScan API ----
   const bscscanKey = process.env.BSCSCAN_API_KEY;
+  console.log(`[USDT] API key configured: ${bscscanKey ? "YES (BscScan primary)" : "NO (using BSC RPC fallback)"}`);
   if (bscscanKey) {
     try {
       console.log(`[USDT] Trying BscScan API...`);
@@ -341,6 +343,7 @@ async function scanUSDT(addr: string, expectedAmount: number, sinceTimestamp: nu
       const res = await withRetry(() => fetch(url));
       if (res?.ok) {
         const data = await res.json();
+        console.log(`[USDT] BscScan response: status=${data?.status}, message=${data?.message}, results=${Array.isArray(data?.result) ? data.result.length : "N/A"}`);
         const txs: any[] = data?.result ?? [];
         if (Array.isArray(txs) && txs.length > 0) {
           console.log(`[USDT] BscScan returned ${txs.length} transfers`);
@@ -368,15 +371,21 @@ async function scanUSDT(addr: string, expectedAmount: number, sinceTimestamp: nu
               base.confirmations = confirmations;
               base.explorerUrl = `https://bscscan.com/tx/${txHash}`;
               base.verified = true;
-              console.log(`[USDT] Payment verified via BscScan: tx=${txHash}, amount=${base.amountReceived} USDT`);
+              console.log(`[USDT] ✅ Payment verified via BscScan: tx=${txHash}, amount=${base.amountReceived} USDT`);
               return base;
             }
           }
-          // BscScan worked but no matching payment found — return (don't fall through to RPC)
+          // BscScan worked — no matching payment found
+          console.log(`[USDT] BscScan worked but no matching payment found`);
+          return base;
+        } else {
+          // BscScan returned 0 transfers — this is valid (no USDT sent to this address)
+          console.log(`[USDT] BscScan returned 0 transfers (no USDT sent to this wallet) — using BscScan result`);
+          base.verificationSource = "bscscan";
           return base;
         }
       }
-      console.warn(`[USDT] BscScan failed or returned no data`);
+      console.warn(`[USDT] BscScan HTTP error (${res?.status}) — falling back to BSC RPC`);
     } catch (e) {
       console.warn(`[USDT] BscScan error: ${(e as Error).message}`);
     }

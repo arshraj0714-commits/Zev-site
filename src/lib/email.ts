@@ -220,7 +220,7 @@ function emailShell(opts: {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
             <tr>
               <td align="center" style="padding:0 0 8px;">
-                <div style="display:inline-block;width:48px;height:48px;line-height:48px;text-align:center;background:linear-gradient(135deg,#10b981,#f59e0b);border-radius:12px;font-size:24px;font-weight:900;color:#000;letter-spacing:-1px;">Z</div>
+                <img src="https://zevdev.vercel.app/favicon.svg" alt="Zev" style="width:48px;height:48px;border-radius:12px;" />
               </td>
             </tr>
             <tr>
