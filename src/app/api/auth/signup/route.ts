@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserByEmail, isAdminEmail } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { createUser, findUserByEmail, createToken, toAppUser, isAdminEmail } from "@/lib/auth";
+import { sendWelcomeEmail } from "@/lib/email";
 
-// POST /api/auth/signup — now just checks if email is available for signup
-// The actual account creation happens in /api/auth/verify-code after email verification
+// POST /api/auth/signup — simple signup (no email verification)
 export async function POST(req: NextRequest) {
   try {
     const { email, password, name } = await req.json();
@@ -18,17 +17,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Please enter a valid email address" }, { status: 400 });
     }
 
-    // Check if email is already registered AND verified
     const existing = await findUserByEmail(emailLower);
-    if (existing && existing.emailVerified) {
+    if (existing) {
       return NextResponse.json({ error: "An account with this email already exists. Please sign in." }, { status: 409 });
     }
 
-    // Email is available — tell the frontend to proceed to send-code
+    const user = await createUser(emailLower, password, name);
+    const appUser = toAppUser(user);
+    const token = createToken(appUser);
+    const admin = isAdminEmail(emailLower);
+
+    // Try to send welcome email (non-blocking)
+    let emailSent = false;
+    try {
+      const result = await sendWelcomeEmail(emailLower, appUser.name, admin);
+      emailSent = result.sent;
+    } catch { /* non-blocking */ }
+
     return NextResponse.json({
-      available: true,
-      message: "Email available. Proceed to send verification code.",
-    });
+      token,
+      user: appUser,
+      emailSent,
+      message: admin
+        ? "Welcome, Arsh! Admin access granted."
+        : "Account created successfully!",
+    }, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
