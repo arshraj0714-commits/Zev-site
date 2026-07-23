@@ -99,13 +99,16 @@ model SiteStats {
 
 // Users for signup/login system
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  name         String?
-  role         String   @default("user") // "user" | "admin"
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String?
+  role          String   @default("user") // "user" | "admin"
+  emailVerified Boolean  @default(false)
+  verifyToken   String?
+  verifyExpiry  DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 // Redeem codes (created by admin, redeemed by users)
