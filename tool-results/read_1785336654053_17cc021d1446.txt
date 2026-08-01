@@ -1,0 +1,842 @@
+     1→"use client";
+     2→
+     3→import { useState } from "react";
+     4→import { motion } from "framer-motion";
+     5→import {
+     6→  Package, Boxes, Code2, X, Plus,
+     7→  CheckCircle2, Loader2, Trash2, ShieldCheck, Lock, LogOut, Pencil, FileArchive, Upload, FileText, Gift, Save,
+     8→} from "lucide-react";
+     9→import { SectionHeading } from "@/components/site/section-heading";
+    10→import { Button } from "@/components/ui/button";
+    11→import { Input } from "@/components/ui/input";
+    12→import { Textarea } from "@/components/ui/textarea";
+    13→import { Label } from "@/components/ui/label";
+    14→import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+    15→import { Badge } from "@/components/ui/badge";
+    16→import { Switch } from "@/components/ui/switch";
+    17→import { ImageUpload } from "@/components/views/image-upload";
+    18→import { ZipUpload, type ZipFileValue } from "@/components/views/zip-upload";
+    19→import { EditProductModal } from "@/components/views/edit-product-modal";
+    20→import { EditStockModal, EditOpenSourceModal } from "@/components/views/edit-stock-opensource-modals";
+    21→import { useZev } from "@/lib/store";
+    22→import { useProducts, useStock, useOpenSource, useOrders, type Product, type StockItem, type OpenSourceItem } from "@/hooks/use-data";
+    23→import { useQueryClient, useQuery } from "@tanstack/react-query";
+    24→import { toast } from "sonner";
+    25→import { cn } from "@/lib/utils";
+    26→
+    27→// ---------- Access gate (redirects to auth / shows notice) ----------
+    28→function AccessGate({ reason }: { reason: "signed-out" | "not-admin" }) {
+    29→  const { go } = useZev();
+    30→  return (
+    31→    <div className="mx-auto mt-8 max-w-md">
+    32→      <motion.div
+    33→        initial={{ opacity: 0, y: 20 }}
+    34→        animate={{ opacity: 1, y: 0 }}
+    35→        className="rounded-3xl glass-strong p-8 text-center ring-1 ring-border/40"
+    36→      >
+    37→        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-gold/20 to-emerald-500/20 ring-1 ring-border/50 animate-pulse-glow">
+    38→          <Lock className="h-8 w-8 text-gold" />
+    39→        </div>
+    40→        <h2 className="mt-4 text-2xl font-bold">
+    41→          {reason === "signed-out" ? "Admin Access" : "Admins Only"}
+    42→        </h2>
+    43→        <p className="mt-1 text-sm text-muted-foreground">
+    44→          {reason === "signed-out"
+    45→            ? "Sign in to your account to manage products, stock, and orders."
+    46→            : "This dashboard is restricted to admins. Your account doesn't have admin access."}
+    47→        </p>
+    48→        <Button
+    49→          onClick={() => go("auth")}
+    50→          className="mt-6 w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950 hover:from-emerald-400 hover:to-emerald-300"
+    51→        >
+    52→          <ShieldCheck className="h-4 w-4" /> Sign In / Sign Up
+    53→        </Button>
+    54→        <button
+    55→          onClick={() => go("home")}
+    56→          className="mt-3 w-full text-center text-sm text-muted-foreground transition-colors hover:text-foreground"
+    57→        >
+    58→          ← Back to home
+    59→        </button>
+    60→      </motion.div>
+    61→    </div>
+    62→  );
+    63→}
+    64→
+    65→export function UploadView() {
+    66→  const { admin, authLoading, logout } = useZev();
+    67→  const qc = useQueryClient();
+    68→
+    69→  // Product form
+    70→  const [pName, setPName] = useState("");
+    71→  const [pDesc, setPDesc] = useState("");
+    72→  const [pImage, setPImage] = useState<string | null>(null);
+    73→  const [pLink, setPLink] = useState("");
+    74→  const [pFolder, setPFolder] = useState("");
+    75→  const [pType, setPType] = useState<"paid" | "free">("paid");
+    76→  const [pPrice, setPPrice] = useState("");
+    77→  const [pTags, setPTags] = useState("");
+    78→  const [pFeatured, setPFeatured] = useState(false);
+    79→  const [pFile, setPFile] = useState<ZipFileValue | null>(null);
+    80→  const [savingP, setSavingP] = useState(false);
+    81→
+    82→  // Stock form
+    83→  const [sName, setSName] = useState("");
+    84→  const [sDesc, setSDesc] = useState("");
+    85→  const [sImage, setSImage] = useState<string | null>(null);
+    86→  const [sCategory, setSCategory] = useState("Email");
+    87→  const [sPrice, setSPrice] = useState("");
+    88→  const [sQty, setSQty] = useState("1");
+    89→  const [sTags, setSTags] = useState("");
+    90→  const [creds, setCreds] = useState<{ label: string; value: string }[]>([
+    91→    { label: "", value: "" },
+    92→  ]);
+    93→  const [savingS, setSavingS] = useState(false);
+    94→
+    95→  // Open source form
+    96→  const [oName, setOName] = useState("");
+    97→  const [oDesc, setODesc] = useState("");
+    98→  const [oImage, setOImage] = useState<string | null>(null);
+    99→  const [oLink, setOLink] = useState("");
+   100→  const [oCategory, setOCategory] = useState("Discord Bot");
+   101→  const [oTags, setOTags] = useState("");
+   102→  const [savingO, setSavingO] = useState(false);
+   103→
+   104→  const { data: productsData } = useProducts();
+   105→  const { data: stockData } = useStock();
+   106→  const { data: osData } = useOpenSource();
+   107→  const { data: ordersData } = useOrders();
+   108→
+   109→  // Edit modals
+   110→  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+   111→  const [editingStock, setEditingStock] = useState<StockItem | null>(null);
+   112→  const [editingOS, setEditingOS] = useState<OpenSourceItem | null>(null);
+   113→
+   114→  async function saveProduct() {
+   115→    if (!pName || !pDesc) { toast.error("Name and description required"); return; }
+   116→    setSavingP(true);
+   117→    try {
+   118→      const res = await fetch("/api/products", {
+   119→        method: "POST",
+   120→        headers: { "Content-Type": "application/json" },
+   121→        body: JSON.stringify({
+   122→          name: pName, description: pDesc, image: pImage, codeLink: pLink,
+   123→          folder: pFolder, type: pType, price: pType === "free" ? 0 : Number(pPrice) || 0,
+   124→          tags: pTags, featured: pFeatured,
+   125→          fileName: pFile?.name ?? null, fileData: pFile?.data ?? null, fileSize: pFile?.size ?? null,
+   126→        }),
+   127→      });
+   128→      if (!res.ok) {
+   129→        const data = await res.json().catch(() => ({}));
+   130→        throw new Error(data.error || `Request failed (${res.status})`);
+   131→      }
+   132→      toast.success("Product added successfully!");
+   133→      setPName(""); setPDesc(""); setPImage(null); setPLink(""); setPFolder("");
+   134→      setPPrice(""); setPTags(""); setPFeatured(false); setPFile(null);
+   135→      qc.invalidateQueries({ queryKey: ["products"] });
+   136→    } catch (e) { toast.error((e as Error).message || "Failed to add product"); }
+   137→    finally { setSavingP(false); }
+   138→  }
+   139→
+   140→  async function saveStock() {
+   141→    if (!sName || !sDesc) { toast.error("Name and description required"); return; }
+   142→    const validCreds = creds.filter((c) => c.label || c.value);
+   143→    if (validCreds.length === 0) { toast.error("Add at least one credential"); return; }
+   144→    setSavingS(true);
+   145→    try {
+   146→      const res = await fetch("/api/stock", {
+   147→        method: "POST",
+   148→        headers: { "Content-Type": "application/json" },
+   149→        body: JSON.stringify({
+   150→          name: sName, description: sDesc, image: sImage, category: sCategory,
+   151→          price: Number(sPrice) || 0, quantity: Number(sQty) || 1,
+   152→          credentials: validCreds, tags: sTags,
+   153→        }),
+   154→      });
+   155→      if (!res.ok) {
+   156→        const data = await res.json().catch(() => ({}));
+   157→        throw new Error(data.error || `Request failed (${res.status})`);
+   158→      }
+   159→      toast.success("Stock item added!");
+   160→      setSName(""); setSDesc(""); setSImage(null); setSPrice(""); setSQty("1");
+   161→      setSTags(""); setCreds([{ label: "", value: "" }]);
+   162→      qc.invalidateQueries({ queryKey: ["stock"] });
+   163→    } catch (e) { toast.error((e as Error).message || "Failed to add stock"); }
+   164→    finally { setSavingS(false); }
+   165→  }
+   166→
+   167→  // Handle .txt file upload for new stock — parse credentials separated by newlines or commas
+   168→  function handleCredFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+   169→    const file = e.target.files?.[0];
+   170→    if (!file) return;
+   171→    const reader = new FileReader();
+   172→    reader.onload = () => {
+   173→      const text = reader.result as string;
+   174→      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+   175→      const parsed: { label: string; value: string }[] = [];
+   176→      for (const line of lines) {
+   177→        const parts = line.split(",").map((p) => p.trim()).filter(Boolean);
+   178→        for (const part of parts) {
+   179→          parsed.push({ label: `Item ${parsed.length + 1}`, value: part });
+   180→        }
+   181→      }
+   182→      if (parsed.length > 0) {
+   183→        setCreds(parsed);
+   184→        toast.success(`Loaded ${parsed.length} credentials from file`);
+   185→      } else {
+   186→        toast.error("No credentials found in file");
+   187→      }
+   188→    };
+   189→    reader.readAsText(file);
+   190→    e.target.value = "";
+   191→  }
+   192→
+   193→  async function saveOS() {
+   194→    if (!oName || !oDesc) { toast.error("Name and description required"); return; }
+   195→    setSavingO(true);
+   196→    try {
+   197→      const res = await fetch("/api/opensource", {
+   198→        method: "POST",
+   199→        headers: { "Content-Type": "application/json" },
+   200→        body: JSON.stringify({
+   201→          name: oName, description: oDesc, image: oImage, codeLink: oLink,
+   202→          category: oCategory, tags: oTags,
+   203→        }),
+   204→      });
+   205→      if (!res.ok) {
+   206→        const data = await res.json().catch(() => ({}));
+   207→        throw new Error(data.error || `Request failed (${res.status})`);
+   208→      }
+   209→      toast.success("Open source code added!");
+   210→      setOName(""); setODesc(""); setOImage(null); setOLink(""); setOTags("");
+   211→      qc.invalidateQueries({ queryKey: ["opensource"] });
+   212→    } catch (e) { toast.error((e as Error).message || "Failed to add open source code"); }
+   213→    finally { setSavingO(false); }
+   214→  }
+   215→
+   216→  async function deleteProduct(id: string) {
+   217→    if (!confirm("Delete this product?")) return;
+   218→    const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
+   219→    if (res.ok) { toast.success("Deleted"); qc.invalidateQueries({ queryKey: ["products"] }); }
+   220→  }
+   221→  async function deleteStock(id: string) {
+   222→    if (!confirm("Delete this stock item?")) return;
+   223→    const res = await fetch(`/api/stock/${id}`, { method: "DELETE" });
+   224→    if (res.ok) { toast.success("Deleted"); qc.invalidateQueries({ queryKey: ["stock"] }); }
+   225→  }
+   226→  async function deleteOS(id: string) {
+   227→    if (!confirm("Delete this open source code?")) return;
+   228→    const res = await fetch(`/api/opensource/${id}`, { method: "DELETE" });
+   229→    if (res.ok) { toast.success("Deleted"); qc.invalidateQueries({ queryKey: ["opensource"] }); }
+   230→  }
+   231→
+   232→  // Loading state
+   233→  if (authLoading) {
+   234→    return (
+   235→      <div className="mx-auto max-w-5xl px-4 py-24 sm:px-6 lg:px-8">
+   236→        <div className="flex flex-col items-center gap-3">
+   237→          <Loader2 className="h-8 w-8 animate-spin text-gold" />
+   238→          <p className="text-sm text-muted-foreground">Loading admin panel...</p>
+   239→        </div>
+   240→      </div>
+   241→    );
+   242→  }
+   243→
+   244→  // Not logged in → show login
+   245→  if (!admin) {
+   246→    return (
+   247→      <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+   248→        <SectionHeading
+   249→          eyebrow="Dashboard"
+   250→          title="Upload & Manage"
+   251→          subtitle="Sign in to manage products, stock, and orders."
+   252→        />
+   253→        <AccessGate reason="signed-out" />
+   254→      </div>
+   255→    );
+   256→  }
+   257→
+   258→  // Non-admin users can't access the dashboard
+   259→  if (admin.role !== "admin") {
+   260→    return (
+   261→      <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+   262→        <SectionHeading
+   263→          eyebrow="Dashboard"
+   264→          title="Upload & Manage"
+   265→          subtitle="This area is restricted to administrators."
+   266→        />
+   267→        <AccessGate reason="not-admin" />
+   268→      </div>
+   269→    );
+   270→  }
+   271→
+   272→  // Logged in → show admin panel
+   273→  return (
+   274→    <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+   275→      {/* Admin header */}
+   276→      <div className="mb-8 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+   277→        <div>
+   278→          <div className="flex items-center gap-2">
+   279→            <ShieldCheck className="h-5 w-5 text-gold" />
+   280→            <h2 className="text-2xl font-bold">Welcome, {admin.name.split(" ")[0]}</h2>
+   281→          </div>
+   282→          <p className="mt-1 text-sm text-muted-foreground">{admin.role} · {admin.email}</p>
+   283→        </div>
+   284→        <Button variant="outline" size="sm" onClick={logout} className="glass gap-2">
+   285→          <LogOut className="h-4 w-4" /> Logout
+   286→        </Button>
+   287→      </div>
+   288→
+   289→      <Tabs defaultValue="product" className="mt-2">
+   290→        <TabsList className="grid w-full grid-cols-3 glass">
+   291→          <TabsTrigger value="product" className="gap-2"><Package className="h-4 w-4" /> Product</TabsTrigger>
+   292→          <TabsTrigger value="stock" className="gap-2"><Boxes className="h-4 w-4" /> Stock</TabsTrigger>
+   293→          <TabsTrigger value="opensource" className="gap-2"><Code2 className="h-4 w-4" /> Open Source</TabsTrigger>
+   294→        </TabsList>
+   295→
+   296→        {/* PRODUCT FORM */}
+   297→        <TabsContent value="product" className="mt-6 space-y-6">
+   298→          <div className="grid gap-5 rounded-2xl glass p-6 ring-1 ring-border/40 md:grid-cols-2">
+   299→            <div className="space-y-3">
+   300→              <div><Label>Name *</Label><Input value={pName} onChange={(e)=>setPName(e.target.value)} className="glass" placeholder="e.g. Nitro Sniper Bot" /></div>
+   301→              <div><Label>Description *</Label><Textarea value={pDesc} onChange={(e)=>setPDesc(e.target.value)} className="glass" rows={3} placeholder="What does it do?" /></div>
+   302→              <div><Label>Code Link</Label><Input value={pLink} onChange={(e)=>setPLink(e.target.value)} className="glass" placeholder="https://github.com/..." /></div>
+   303→              <div><Label>Folder / Category</Label><Input value={pFolder} onChange={(e)=>setPFolder(e.target.value)} className="glass" placeholder="e.g. Discord Bots" /></div>
+   304→              <div><Label>Tags (comma separated)</Label><Input value={pTags} onChange={(e)=>setPTags(e.target.value)} className="glass" placeholder="discord, bot, sniper" /></div>
+   305→            </div>
+   306→            <div className="space-y-4">
+   307→              <ImageUpload value={pImage} onChange={setPImage} label="Product Image" />
+   308→              <ZipUpload
+   309→                fileName={pFile?.name}
+   310→                fileSize={pFile?.size}
+   311→                onChange={(f) => setPFile(f)}
+   312→              />
+   313→              <div>
+   314→                <Label>Type</Label>
+   315→                <div className="mt-2 flex gap-2">
+   316→                  {(["paid","free"] as const).map((t) => (
+   317→                    <button
+   318→                      key={t}
+   319→                      onClick={() => setPType(t)}
+   320→                      className={cn(
+   321→                        "flex-1 rounded-lg px-4 py-2 text-sm font-semibold capitalize ring-1 transition-colors",
+   322→                        pType === t
+   323→                          ? t === "paid" ? "bg-gold/90 text-black ring-gold" : "bg-emerald-500/90 text-emerald-950 ring-emerald-500"
+   324→                          : "glass ring-border/40 text-muted-foreground hover:text-foreground"
+   325→                      )}
+   326→                    >
+   327→                      {t === "paid" ? "Paid" : "Free"}
+   328→                    </button>
+   329→                  ))}
+   330→                </div>
+   331→              </div>
+   332→              {pType === "paid" && (
+   333→                <div><Label>Price (USD)</Label><Input type="number" value={pPrice} onChange={(e)=>setPPrice(e.target.value)} className="glass" placeholder="25.00" /></div>
+   334→              )}
+   335→              <div className="flex items-center justify-between rounded-lg glass px-4 py-3 ring-1 ring-border/40">
+   336→                <div><div className="text-sm font-medium">Featured</div><div className="text-xs text-muted-foreground">Show on homepage</div></div>
+   337→                <Switch checked={pFeatured} onCheckedChange={setPFeatured} />
+   338→              </div>
+   339→              <Button onClick={saveProduct} disabled={savingP} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
+   340→                {savingP ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add Product
+   341→              </Button>
+   342→            </div>
+   343→          </div>
+   344→
+   345→          <div className="rounded-2xl glass p-5 ring-1 ring-border/40">
+   346→            <h4 className="mb-3 font-semibold">Existing Products ({productsData?.products.length ?? 0})</h4>
+   347→            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+   348→              {(productsData?.products ?? []).map((p) => (
+   349→                <button
+   350→                  key={p.id}
+   351→                  type="button"
+   352→                  onClick={() => setEditingProduct(p)}
+   353→                  className="group flex w-full items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-left text-sm transition-colors hover:bg-accent/40 hover:ring-1 hover:ring-gold/30"
+   354→                >
+   355→                  <div className="flex items-center gap-2 min-w-0">
+   356→                    <Badge variant={p.type === "paid" ? "default" : "secondary"} className={p.type === "paid" ? "bg-gold/80 text-black" : "bg-emerald-500/80 text-emerald-950"}>{p.type}</Badge>
+   357→                    <span className="truncate font-medium">{p.name}</span>
+   358→                    {p.featured && <Badge variant="outline" className="text-gold">★</Badge>}
+   359→                    {p.fileName && (
+   360→                      <span title={p.fileName} className="inline-flex items-center gap-1 text-emerald-glow">
+   361→                        <FileArchive className="h-3.5 w-3.5" />
+   362→                      </span>
+   363→                    )}
+   364→                  </div>
+   365→                  <div className="flex items-center gap-2">
+   366→                    <span className="text-xs text-muted-foreground">{p.price > 0 ? `$${p.price}` : "FREE"}</span>
+   367→                    <span className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+   368→                      <Pencil className="h-3.5 w-3.5" />
+   369→                    </span>
+   370→                    <span
+   371→                      role="button"
+   372→                      tabIndex={0}
+   373→                      onClick={(e) => { e.stopPropagation(); deleteProduct(p.id); }}
+   374→                      onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); deleteProduct(p.id); } }}
+   375→                      className="text-muted-foreground hover:text-rose-400"
+   376→                    >
+   377→                      <Trash2 className="h-3.5 w-3.5" />
+   378→                    </span>
+   379→                  </div>
+   380→                </button>
+   381→              ))}
+   382→            </div>
+   383→          </div>
+   384→        </TabsContent>
+   385→
+   386→        {/* STOCK FORM */}
+   387→        <TabsContent value="stock" className="mt-6 space-y-6">
+   388→          <div className="grid gap-5 rounded-2xl glass p-6 ring-1 ring-border/40 md:grid-cols-2">
+   389→            <div className="space-y-3">
+   390→              <div><Label>Name *</Label><Input value={sName} onChange={(e)=>setSName(e.target.value)} className="glass" placeholder="e.g. Premium Email (5 pack)" /></div>
+   391→              <div><Label>Description *</Label><Textarea value={sDesc} onChange={(e)=>setSDesc(e.target.value)} className="glass" rows={3} placeholder="What's included?" /></div>
+   392→              <div><Label>Category</Label>
+   393→                <Input value={sCategory} onChange={(e)=>setSCategory(e.target.value)} className="glass" placeholder="Email / Account / Credential" list="stock-cats" />
+   394→                <datalist id="stock-cats"><option value="Email" /><option value="Account" /><option value="Credential" /></datalist>
+   395→              </div>
+   396→              <div className="grid grid-cols-2 gap-3">
+   397→                <div><Label>Price (USD)</Label><Input type="number" value={sPrice} onChange={(e)=>setSPrice(e.target.value)} className="glass" placeholder="8.00" /></div>
+   398→                <div><Label>Quantity</Label><Input type="number" value={sQty} onChange={(e)=>setSQty(e.target.value)} className="glass" placeholder="10" /></div>
+   399→              </div>
+   400→              <div><Label>Tags (comma separated)</Label><Input value={sTags} onChange={(e)=>setSTags(e.target.value)} className="glass" placeholder="email, verified" /></div>
+   401→            </div>
+   402→            <div className="space-y-4">
+   403→              <ImageUpload value={sImage} onChange={setSImage} label="Stock Image" />
+   404→              <div>
+   405→                <div className="flex items-center justify-between">
+   406→                  <Label>Credentials (revealed after purchase)</Label>
+   407→                  <div className="flex gap-2">
+   408→                    <label className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs text-emerald-glow ring-1 ring-emerald-glow/30 hover:bg-emerald-glow/10">
+   409→                      <Upload className="h-3 w-3" /> Upload .txt
+   410→                      <input type="file" accept=".txt,text/plain" onChange={handleCredFileUpload} className="hidden" />
+   411→                    </label>
+   412→                    <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => setCreds([...creds, { label: "", value: "" }])}>
+   413→                      <Plus className="h-3 w-3" /> Add
+   414→                    </Button>
+   415→                  </div>
+   416→                </div>
+   417→                <div className="mt-2 max-h-52 space-y-2 overflow-y-auto pr-1">
+   418→                  {creds.map((c, i) => (
+   419→                    <div key={i} className="flex gap-2">
+   420→                      <Input value={c.label} onChange={(e)=>{const n=[...creds];n[i]={...n[i],label:e.target.value};setCreds(n);}} className="glass text-sm" placeholder="Label (e.g. Email)" />
+   421→                      <Input value={c.value} onChange={(e)=>{const n=[...creds];n[i]={...n[i],value:e.target.value};setCreds(n);}} className="glass text-sm" placeholder="user@x.com : pass" />
+   422→                      {creds.length > 1 && (
+   423→                        <button onClick={() => setCreds(creds.filter((_,x)=>x!==i))} className="text-muted-foreground hover:text-rose-400 px-1"><X className="h-4 w-4" /></button>
+   424→                      )}
+   425→                    </div>
+   426→                  ))}
+   427→                </div>
+   428→                <p className="mt-2 flex items-center gap-1 text-[11px] text-muted-foreground">
+   429→                  <FileText className="h-3 w-3" /> Upload a .txt file — each line or comma-separated value becomes a credential. Or add manually.
+   430→                </p>
+   431→              </div>
+   432→              <Button onClick={saveStock} disabled={savingS} className="w-full gap-2 bg-gradient-to-r from-gold to-amber-400 text-black">
+   433→                {savingS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add Stock Item
+   434→              </Button>
+   435→            </div>
+   436→          </div>
+   437→
+   438→          <div className="rounded-2xl glass p-5 ring-1 ring-border/40">
+   439→            <h4 className="mb-3 font-semibold">Existing Stock ({stockData?.items.length ?? 0})</h4>
+   440→            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+   441→              {(stockData?.items ?? []).map((s) => (
+   442→                <button
+   443→                  key={s.id}
+   444→                  type="button"
+   445→                  onClick={() => setEditingStock(s)}
+   446→                  className="group flex w-full items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-left text-sm transition-colors hover:bg-accent/40 hover:ring-1 hover:ring-gold/30"
+   447→                >
+   448→                  <div className="flex items-center gap-2 min-w-0">
+   449→                    <Badge variant="secondary" className="glass">{s.category}</Badge>
+   450→                    <span className="truncate font-medium">{s.name}</span>
+   451→                  </div>
+   452→                  <div className="flex items-center gap-2">
+   453→                    <span className="text-xs text-muted-foreground">${s.price} · {s.quantity - s.soldCount} left</span>
+   454→                    <span className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+   455→                      <Pencil className="h-3.5 w-3.5" />
+   456→                    </span>
+   457→                    <span
+   458→                      role="button"
+   459→                      tabIndex={0}
+   460→                      onClick={(e) => { e.stopPropagation(); deleteStock(s.id); }}
+   461→                      onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); deleteStock(s.id); } }}
+   462→                      className="text-muted-foreground hover:text-rose-400"
+   463→                    >
+   464→                      <Trash2 className="h-3.5 w-3.5" />
+   465→                    </span>
+   466→                  </div>
+   467→                </button>
+   468→              ))}
+   469→            </div>
+   470→          </div>
+   471→        </TabsContent>
+   472→
+   473→        {/* OPEN SOURCE FORM */}
+   474→        <TabsContent value="opensource" className="mt-6 space-y-6">
+   475→          <div className="grid gap-5 rounded-2xl glass p-6 ring-1 ring-border/40 md:grid-cols-2">
+   476→            <div className="space-y-3">
+   477→              <div><Label>Name *</Label><Input value={oName} onChange={(e)=>setOName(e.target.value)} className="glass" placeholder="e.g. Discord.js Bot Template" /></div>
+   478→              <div><Label>Description *</Label><Textarea value={oDesc} onChange={(e)=>setODesc(e.target.value)} className="glass" rows={3} placeholder="What does it do?" /></div>
+   479→              <div><Label>Code / Repo Link</Label><Input value={oLink} onChange={(e)=>setOLink(e.target.value)} className="glass" placeholder="https://github.com/..." /></div>
+   480→              <div><Label>Category</Label>
+   481→                <Input value={oCategory} onChange={(e)=>setOCategory(e.target.value)} className="glass" list="os-cats" />
+   482→                <datalist id="os-cats"><option value="Discord Bot" /><option value="Tool" /><option value="Script" /></datalist>
+   483→              </div>
+   484→              <div><Label>Tags (comma separated)</Label><Input value={oTags} onChange={(e)=>setOTags(e.target.value)} className="glass" placeholder="discord.js, free, template" /></div>
+   485→            </div>
+   486→            <div className="space-y-4">
+   487→              <ImageUpload value={oImage} onChange={setOImage} label="Preview Image" />
+   488→              <div className="rounded-lg bg-emerald-500/10 p-4 ring-1 ring-emerald-glow/20">
+   489→                <div className="flex items-center gap-2 text-sm font-medium text-emerald-glow">
+   490→                  <CheckCircle2 className="h-4 w-4" /> Always Free
+   491→                </div>
+   492→                <p className="mt-1 text-xs text-muted-foreground">Open source codes are free for everyone — no payment required.</p>
+   493→              </div>
+   494→              <Button onClick={saveOS} disabled={savingO} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
+   495→                {savingO ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add Open Source Code
+   496→              </Button>
+   497→            </div>
+   498→          </div>
+   499→
+   500→          <div className="rounded-2xl glass p-5 ring-1 ring-border/40">
+   501→            <h4 className="mb-3 font-semibold">Existing Open Source ({osData?.items.length ?? 0})</h4>
+   502→            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+   503→              {(osData?.items ?? []).map((o) => (
+   504→                <button
+   505→                  key={o.id}
+   506→                  type="button"
+   507→                  onClick={() => setEditingOS(o)}
+   508→                  className="group flex w-full items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-left text-sm transition-colors hover:bg-accent/40 hover:ring-1 hover:ring-emerald-glow/30"
+   509→                >
+   510→                  <div className="flex items-center gap-2 min-w-0">
+   511→                    <Badge variant="secondary" className="glass">{o.category}</Badge>
+   512→                    <span className="truncate font-medium">{o.name}</span>
+   513→                  </div>
+   514→                  <div className="flex items-center gap-2">
+   515→                    <span className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+   516→                      <Pencil className="h-3.5 w-3.5" />
+   517→                    </span>
+   518→                    <span
+   519→                      role="button"
+   520→                      tabIndex={0}
+   521→                      onClick={(e) => { e.stopPropagation(); deleteOS(o.id); }}
+   522→                      onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); deleteOS(o.id); } }}
+   523→                      className="text-muted-foreground hover:text-rose-400"
+   524→                    >
+   525→                      <Trash2 className="h-3.5 w-3.5" />
+   526→                    </span>
+   527→                  </div>
+   528→                </button>
+   529→              ))}
+   530→            </div>
+   531→          </div>
+   532→        </TabsContent>
+   533→      </Tabs>
+   534→
+   535→      {/* Orders overview */}
+   536→      <div className="mt-8 rounded-2xl glass p-5 ring-1 ring-border/40">
+   537→        <h4 className="mb-3 font-semibold">Recent Orders ({ordersData?.orders.length ?? 0})</h4>
+   538→        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+   539→          {(ordersData?.orders ?? []).slice(0, 20).map((o) => (
+   540→            <div key={o.id} className="flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm">
+   541→              <div className="flex items-center gap-2 min-w-0">
+   542→                <Badge variant={o.status === "paid" ? "default" : "secondary"} className={o.status === "paid" ? "bg-emerald-500/80 text-emerald-950" : "glass"}>{o.status}</Badge>
+   543→                <span className="truncate font-medium">{o.itemName}</span>
+   544→              </div>
+   545→              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   546→                <span>{o.paymentMethod}</span>
+   547→                <span>${o.amount}</span>
+   548→              </div>
+   549→            </div>
+   550→          ))}
+   551→          {(ordersData?.orders.length ?? 0) === 0 && <p className="text-sm text-muted-foreground">No orders yet.</p>}
+   552→        </div>
+   553→      </div>
+   554→
+   555→      <EditProductModal
+   556→        product={editingProduct}
+   557→        open={!!editingProduct}
+   558→        onOpenChange={(o) => { if (!o) setEditingProduct(null); }}
+   559→      />
+   560→      <EditStockModal
+   561→        item={editingStock}
+   562→        open={!!editingStock}
+   563→        onOpenChange={(o) => { if (!o) setEditingStock(null); }}
+   564→      />
+   565→      <EditOpenSourceModal
+   566→        item={editingOS}
+   567→        open={!!editingOS}
+   568→        onOpenChange={(o) => { if (!o) setEditingOS(null); }}
+   569→      />
+   570→
+   571→      {/* Redeem Codes section (admin) */}
+   572→      <RedeemCodesSection />
+   573→    </div>
+   574→  );
+   575→}
+   576→
+   577→// ---------- Redeem Codes section (admin only) ----------
+   578→function RedeemCodesSection() {
+   579→  const qc = useQueryClient();
+   580→  const [newCode, setNewCode] = useState("");
+   581→  const [newRewardName, setNewRewardName] = useState("");
+   582→  const [newDesc, setNewDesc] = useState("");
+   583→  const [newLink, setNewLink] = useState("");
+   584→  const [newDiscount, setNewDiscount] = useState("");
+   585→  const [newMax, setNewMax] = useState("1");
+   586→  const [newExpiry, setNewExpiry] = useState("");
+   587→  const [saving, setSaving] = useState(false);
+   588→  const [editingCode, setEditingCode] = useState<any | null>(null);
+   589→
+   590→  const { data } = useQuery({
+   591→    queryKey: ["admin-redeem-codes"],
+   592→    queryFn: async () => {
+   593→      const token = JSON.parse(localStorage.getItem("zev-auth") || "{}").token;
+   594→      const res = await fetch("/api/redeem", { headers: { Authorization: `Bearer ${token}` } });
+   595→      const text = await res.text();
+   596→      try { return JSON.parse(text); } catch { return {}; }
+   597→    },
+   598→  });
+   599→  const codes = (data as any)?.codes ?? [];
+   600→
+   601→  async function createCode(e: React.FormEvent) {
+   602→    e.preventDefault();
+   603→    if (!newCode) { toast.error("Code is required"); return; }
+   604→    if (!newRewardName) { toast.error("Reward name is required"); return; }
+   605→    setSaving(true);
+   606→    try {
+   607→      const token = JSON.parse(localStorage.getItem("zev-auth") || "{}").token;
+   608→      // Determine reward type
+   609→      let rewardType = "link";
+   610→      if (newDiscount) rewardType = "discount";
+   611→
+   612→      const res = await fetch("/api/redeem/create", {
+   613→        method: "POST",
+   614→        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+   615→        body: JSON.stringify({
+   616→          code: newCode,
+   617→          description: newDesc,
+   618→          rewardType,
+   619→          rewardName: newRewardName,
+   620→          rewardLink: newLink || null,
+   621→          discountPct: newDiscount || null,
+   622→          maxUses: Number(newMax) || 1,
+   623→          expiresAt: newExpiry || null,
+   624→        }),
+   625→      });
+   626→      if (!res.ok) {
+   627→        const d = await res.json().catch(() => ({}));
+   628→        throw new Error(d.error || "Failed");
+   629→      }
+   630→      toast.success("Redeem code created!");
+   631→      setNewCode(""); setNewRewardName(""); setNewDesc(""); setNewLink(""); setNewDiscount(""); setNewMax("1"); setNewExpiry("");
+   632→      qc.invalidateQueries({ queryKey: ["admin-redeem-codes"] });
+   633→      qc.invalidateQueries({ queryKey: ["redeem-codes"] });
+   634→    } catch (e) {
+   635→      toast.error((e as Error).message);
+   636→    } finally {
+   637→      setSaving(false);
+   638→    }
+   639→  }
+   640→
+   641→  async function deleteCode(id: string) {
+   642→    if (!confirm("Delete this code?")) return;
+   643→    const token = JSON.parse(localStorage.getItem("zev-auth") || "{}").token;
+   644→    const res = await fetch(`/api/redeem/create?id=${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+   645→    if (res.ok) {
+   646→      toast.success("Deleted");
+   647→      qc.invalidateQueries({ queryKey: ["admin-redeem-codes"] });
+   648→      qc.invalidateQueries({ queryKey: ["redeem-codes"] });
+   649→    }
+   650→  }
+   651→
+   652→  function handleEditCode(c: any) {
+   653→    setEditingCode(c);
+   654→  }
+   655→
+   656→  async function handleSaveEditCode(updated: any) {
+   657→    const token = JSON.parse(localStorage.getItem("zev-auth") || "{}").token;
+   658→    setSaving(true);
+   659→    try {
+   660→      const res = await fetch(`/api/redeem/create?id=${updated.id}`, {
+   661→        method: "PUT",
+   662→        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+   663→        body: JSON.stringify({
+   664→          code: updated.code,
+   665→          description: updated.description,
+   666→          rewardType: updated.rewardType || (updated.discountPct ? "discount" : "link"),
+   667→          rewardName: updated.rewardName,
+   668→          rewardLink: updated.rewardLink,
+   669→          discountPct: updated.discountPct,
+   670→          maxUses: updated.maxUses,
+   671→          expiresAt: updated.expiresAt,
+   672→          active: updated.active,
+   673→        }),
+   674→      });
+   675→      if (!res.ok) {
+   676→        const d = await res.json().catch(() => ({}));
+   677→        throw new Error(d.error || "Failed");
+   678→      }
+   679→      toast.success("Code updated!");
+   680→      setEditingCode(null);
+   681→      qc.invalidateQueries({ queryKey: ["admin-redeem-codes"] });
+   682→      qc.invalidateQueries({ queryKey: ["redeem-codes"] });
+   683→    } catch (e) {
+   684→      toast.error((e as Error).message);
+   685→    } finally {
+   686→      setSaving(false);
+   687→    }
+   688→  }
+   689→
+   690→  return (
+   691→    <div className="mt-8 rounded-2xl glass p-5 ring-1 ring-border/40">
+   692→      <h4 className="mb-3 font-semibold flex items-center gap-2">
+   693→        <Gift className="h-4 w-4 text-gold" /> Redeem Codes ({codes.length})
+   694→      </h4>
+   695→
+   696→      {/* Create form */}
+   697→      <form onSubmit={createCode} className="mb-4 space-y-2">
+   698→        <div className="grid gap-2 sm:grid-cols-2">
+   699→          <div>
+   700→            <Label className="text-xs text-muted-foreground mb-1">Code *</Label>
+   701→            <Input value={newCode} onChange={(e) => setNewCode(e.target.value.toUpperCase())} className="glass text-sm font-mono" placeholder="SUMMER2025" />
+   702→          </div>
+   703→          <div>
+   704→            <Label className="text-xs text-muted-foreground mb-1">Reward Name *</Label>
+   705→            <Input value={newRewardName} onChange={(e) => setNewRewardName(e.target.value)} className="glass text-sm" placeholder="e.g. 10% off or Free Bot Access" />
+   706→          </div>
+   707→        </div>
+   708→        <div className="grid gap-2 sm:grid-cols-2">
+   709→          <div>
+   710→            <Label className="text-xs text-muted-foreground mb-1">Discount % (leave empty = no discount)</Label>
+   711→            <Input type="number" min="0" max="100" value={newDiscount} onChange={(e) => setNewDiscount(e.target.value)} className="glass text-sm" placeholder="e.g. 10 (for 10% off)" />
+   712→          </div>
+   713→          <div>
+   714→            <Label className="text-xs text-muted-foreground mb-1">Reward Link (GitHub/URL, if no discount)</Label>
+   715→            <Input value={newLink} onChange={(e) => setNewLink(e.target.value)} className="glass text-sm" placeholder="https://github.com/..." />
+   716→          </div>
+   717→        </div>
+   718→        <div>
+   719→          <Label className="text-xs text-muted-foreground mb-1">Description (optional)</Label>
+   720→          <Input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} className="glass text-sm" placeholder="Short description of the reward" />
+   721→        </div>
+   722→        <div className="grid gap-2 sm:grid-cols-2">
+   723→          <div>
+   724→            <Label className="text-xs text-muted-foreground mb-1">Max Uses</Label>
+   725→            <Input type="number" value={newMax} onChange={(e) => setNewMax(e.target.value)} className="glass text-sm" placeholder="1" />
+   726→          </div>
+   727→          <div>
+   728→            <Label className="text-xs text-muted-foreground mb-1">Expiry Date (optional)</Label>
+   729→            <Input type="datetime-local" value={newExpiry} onChange={(e) => setNewExpiry(e.target.value)} className="glass text-sm" />
+   730→          </div>
+   731→        </div>
+   732→        <Button type="submit" disabled={saving} className="w-full gap-2 bg-gradient-to-r from-gold to-amber-400 text-black text-sm">
+   733→          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Create Code
+   734→        </Button>
+   735→      </form>
+   736→
+   737→      {/* Existing codes */}
+   738→      <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
+   739→        {codes.map((c: any) => (
+   740→          <div key={c.id} className="group flex items-center justify-between gap-2 rounded-lg bg-accent/20 px-3 py-2 text-sm transition-colors hover:bg-accent/40 hover:ring-1 hover:ring-gold/30">
+   741→            <div className="min-w-0 flex-1 cursor-pointer" onClick={() => handleEditCode(c)}>
+   742→              <div className="flex items-center gap-2">
+   743→                <code className="font-mono font-bold text-gold">{c.code}</code>
+   744→                <span className="text-xs text-foreground truncate">{c.rewardName}</span>
+   745→                {c.discountPct ? (
+   746→                  <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-glow">{c.discountPct}% off</span>
+   747→                ) : c.rewardLink ? (
+   748→                  <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] text-blue-300">link</span>
+   749→                ) : null}
+   750→              </div>
+   751→              <div className="text-xs text-muted-foreground">
+   752→                {c.usesCount}/{c.maxUses} used · {c.active ? "active" : "inactive"}
+   753→                {c.expiresAt && ` · exp ${new Date(c.expiresAt).toLocaleDateString()}`}
+   754→              </div>
+   755→            </div>
+   756→            <div className="flex items-center gap-1 shrink-0">
+   757→              <button onClick={() => handleEditCode(c)} className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-gold">
+   758→                <Pencil className="h-3.5 w-3.5" />
+   759→              </button>
+   760→              <button onClick={() => deleteCode(c.id)} className="text-muted-foreground hover:text-rose-400">
+   761→                <Trash2 className="h-3.5 w-3.5" />
+   762→              </button>
+   763→            </div>
+   764→          </div>
+   765→        ))}
+   766→        {codes.length === 0 && <p className="text-sm text-muted-foreground">No codes yet.</p>}
+   767→      </div>
+   768→
+   769→      {/* Edit modal */}
+   770→      {editingCode && (
+   771→        <EditRedeemCodeModal
+   772→          code={editingCode}
+   773→          saving={saving}
+   774→          onSave={handleSaveEditCode}
+   775→          onClose={() => setEditingCode(null)}
+   776→        />
+   777→      )}
+   778→    </div>
+   779→  );
+   780→}
+   781→
+   782→// ---------- Edit Redeem Code Modal ----------
+   783→function EditRedeemCodeModal({ code, saving, onSave, onClose }: {
+   784→  code: any;
+   785→  saving: boolean;
+   786→  onSave: (updated: any) => void;
+   787→  onClose: () => void;
+   788→}) {
+   789→  const [editCode, setEditCode] = useState(code.code || "");
+   790→  const [editRewardName, setEditRewardName] = useState(code.rewardName || "");
+   791→  const [editDesc, setEditDesc] = useState(code.description || "");
+   792→  const [editLink, setEditLink] = useState(code.rewardLink || "");
+   793→  const [editDiscount, setEditDiscount] = useState(code.discountPct ? String(code.discountPct) : "");
+   794→  const [editMax, setEditMax] = useState(String(code.maxUses || 1));
+   795→  const [editExpiry, setEditExpiry] = useState(code.expiresAt ? new Date(code.expiresAt).toISOString().slice(0, 16) : "");
+   796→  const [editActive, setEditActive] = useState(code.active !== false);
+   797→
+   798→  return (
+   799→    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+   800→      <div className="w-full max-w-md rounded-2xl glass-strong p-6 ring-1 ring-border/40 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+   801→        <div className="mb-4 flex items-center justify-between">
+   802→          <h3 className="text-lg font-bold flex items-center gap-2"><Pencil className="h-4 w-4 text-gold" /> Edit Code</h3>
+   803→          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+   804→        </div>
+   805→        <div className="space-y-3">
+   806→          <div><Label className="text-xs text-muted-foreground mb-1">Code</Label><Input value={editCode} onChange={(e) => setEditCode(e.target.value.toUpperCase())} className="glass text-sm font-mono" /></div>
+   807→          <div><Label className="text-xs text-muted-foreground mb-1">Reward Name</Label><Input value={editRewardName} onChange={(e) => setEditRewardName(e.target.value)} className="glass text-sm" /></div>
+   808→          <div className="grid grid-cols-2 gap-2">
+   809→            <div><Label className="text-xs text-muted-foreground mb-1">Discount %</Label><Input type="number" min="0" max="100" value={editDiscount} onChange={(e) => setEditDiscount(e.target.value)} className="glass text-sm" placeholder="empty = none" /></div>
+   810→            <div><Label className="text-xs text-muted-foreground mb-1">Max Uses</Label><Input type="number" value={editMax} onChange={(e) => setEditMax(e.target.value)} className="glass text-sm" /></div>
+   811→          </div>
+   812→          <div><Label className="text-xs text-muted-foreground mb-1">Reward Link</Label><Input value={editLink} onChange={(e) => setEditLink(e.target.value)} className="glass text-sm" placeholder="https://..." /></div>
+   813→          <div><Label className="text-xs text-muted-foreground mb-1">Description</Label><Input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} className="glass text-sm" /></div>
+   814→          <div><Label className="text-xs text-muted-foreground mb-1">Expiry Date</Label><Input type="datetime-local" value={editExpiry} onChange={(e) => setEditExpiry(e.target.value)} className="glass text-sm" /></div>
+   815→          <div className="flex items-center justify-between rounded-lg glass px-4 py-2 ring-1 ring-border/40">
+   816→            <span className="text-sm">Active</span>
+   817→            <Switch checked={editActive} onCheckedChange={setEditActive} />
+   818→          </div>
+   819→          <Button
+   820→            onClick={() => onSave({
+   821→              id: code.id,
+   822→              code: editCode,
+   823→              rewardName: editRewardName,
+   824→              description: editDesc,
+   825→              rewardLink: editLink || null,
+   826→              discountPct: editDiscount || null,
+   827→              maxUses: editMax,
+   828→              expiresAt: editExpiry || null,
+   829→              active: editActive,
+   830→            })}
+   831→            disabled={saving}
+   832→            className="w-full gap-2 bg-gradient-to-r from-gold to-amber-400 text-black text-sm"
+   833→          >
+   834→            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+   835→            Save Changes
+   836→          </Button>
+   837→        </div>
+   838→      </div>
+   839→    </div>
+   840→  );
+   841→}
+   842→

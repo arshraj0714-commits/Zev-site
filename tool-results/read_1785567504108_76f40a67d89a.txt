@@ -1,0 +1,944 @@
+     1→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+     2→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+     3→    at inpage.js:1:48628
+     4→    at new Promise (<anonymous>)
+     5→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+     6→    at new ExtendedBroadcastMessage (inpage.js:1:48255)
+     7→    at new ProvidersManager (inpage.js:1:50685)
+     8→    at init (inpage.js:1:3583923)
+     9→    at inpage.js:1:3584887
+    10→    at inpage.js:1:719
+    11→    at inpage.js:1:3585042
+    12→(anonymous) @ inpage.js:1
+    13→import_loglevel.default.error @ inpage.js:1
+    14→(anonymous) @ inpage.js:1
+    15→tryLoadBroadcastMessage @ inpage.js:1
+    16→ExtendedBroadcastMessage @ inpage.js:1
+    17→ProvidersManager @ inpage.js:1
+    18→init @ inpage.js:1
+    19→(anonymous) @ inpage.js:1
+    20→(anonymous) @ inpage.js:1
+    21→(anonymous) @ inpage.js:1
+    22→Promise.then
+    23→(anonymous) @ inpage.js:1
+    24→(anonymous) @ inpage.js:1
+    25→(anonymous) @ inpage.js:1
+    26→(anonymous) @ inpage.js:1
+    27→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+    28→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+    29→    at inpage.js:1:48628
+    30→    at new Promise (<anonymous>)
+    31→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+    32→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+    33→    at ExtendedBroadcastMessage.emit (inpage.js:1:50042)
+    34→    at EthereumAdapter.setChainId (inpage.js:1:1177205)
+    35→    at EthereumAdapter.start (inpage.js:1:1173954)
+    36→    at inpage.js:1:51407
+    37→    at Array.forEach (<anonymous>)
+    38→(anonymous) @ inpage.js:1
+    39→import_loglevel.default.error @ inpage.js:1
+    40→(anonymous) @ inpage.js:1
+    41→tryLoadBroadcastMessage @ inpage.js:1
+    42→getBroadcastMessage @ inpage.js:1
+    43→emit @ inpage.js:1
+    44→setChainId @ inpage.js:1
+    45→start @ inpage.js:1
+    46→(anonymous) @ inpage.js:1
+    47→start @ inpage.js:1
+    48→init @ inpage.js:1
+    49→(anonymous) @ inpage.js:1
+    50→(anonymous) @ inpage.js:1
+    51→(anonymous) @ inpage.js:1
+    52→Promise.then
+    53→(anonymous) @ inpage.js:1
+    54→(anonymous) @ inpage.js:1
+    55→(anonymous) @ inpage.js:1
+    56→(anonymous) @ inpage.js:1
+    57→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+    58→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+    59→    at inpage.js:1:48628
+    60→    at new Promise (<anonymous>)
+    61→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+    62→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+    63→    at ExtendedBroadcastMessage.emit (inpage.js:1:50042)
+    64→    at EthereumAdapter.fetchAlreadyConnectedAccount (inpage.js:1:1177559)
+    65→    at EthereumAdapter.start (inpage.js:1:1173972)
+    66→    at inpage.js:1:51407
+    67→    at Array.forEach (<anonymous>)
+    68→(anonymous) @ inpage.js:1
+    69→import_loglevel.default.error @ inpage.js:1
+    70→(anonymous) @ inpage.js:1
+    71→tryLoadBroadcastMessage @ inpage.js:1
+    72→getBroadcastMessage @ inpage.js:1
+    73→emit @ inpage.js:1
+    74→fetchAlreadyConnectedAccount @ inpage.js:1
+    75→start @ inpage.js:1
+    76→(anonymous) @ inpage.js:1
+    77→start @ inpage.js:1
+    78→init @ inpage.js:1
+    79→(anonymous) @ inpage.js:1
+    80→(anonymous) @ inpage.js:1
+    81→(anonymous) @ inpage.js:1
+    82→Promise.then
+    83→(anonymous) @ inpage.js:1
+    84→(anonymous) @ inpage.js:1
+    85→(anonymous) @ inpage.js:1
+    86→(anonymous) @ inpage.js:1
+    87→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+    88→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+    89→    at inpage.js:1:48628
+    90→    at new Promise (<anonymous>)
+    91→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+    92→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+    93→    at ExtendedBroadcastMessage.emit (inpage.js:1:50042)
+    94→    at EthereumAdapter.setDefaultEthereumWallet (inpage.js:1:1177094)
+    95→    at EthereumAdapter.start (inpage.js:1:1175046)
+    96→    at inpage.js:1:51407
+    97→    at Array.forEach (<anonymous>)
+    98→(anonymous) @ inpage.js:1
+    99→import_loglevel.default.error @ inpage.js:1
+   100→(anonymous) @ inpage.js:1
+   101→tryLoadBroadcastMessage @ inpage.js:1
+   102→getBroadcastMessage @ inpage.js:1
+   103→emit @ inpage.js:1
+   104→setDefaultEthereumWallet @ inpage.js:1
+   105→start @ inpage.js:1
+   106→(anonymous) @ inpage.js:1
+   107→start @ inpage.js:1
+   108→init @ inpage.js:1
+   109→(anonymous) @ inpage.js:1
+   110→(anonymous) @ inpage.js:1
+   111→(anonymous) @ inpage.js:1
+   112→Promise.then
+   113→(anonymous) @ inpage.js:1
+   114→(anonymous) @ inpage.js:1
+   115→(anonymous) @ inpage.js:1
+   116→(anonymous) @ inpage.js:1
+   117→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   118→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   119→    at inpage.js:1:48628
+   120→    at new Promise (<anonymous>)
+   121→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   122→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   123→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   124→    at EthereumAdapter.registerEventListeners (inpage.js:1:1175670)
+   125→    at inpage.js:1:51484
+   126→    at Array.forEach (<anonymous>)
+   127→    at ProvidersManager.start (inpage.js:1:51355)
+   128→(anonymous) @ inpage.js:1
+   129→import_loglevel.default.error @ inpage.js:1
+   130→(anonymous) @ inpage.js:1
+   131→tryLoadBroadcastMessage @ inpage.js:1
+   132→getBroadcastMessage @ inpage.js:1
+   133→addListener @ inpage.js:1
+   134→registerEventListeners @ inpage.js:1
+   135→(anonymous) @ inpage.js:1
+   136→start @ inpage.js:1
+   137→init @ inpage.js:1
+   138→(anonymous) @ inpage.js:1
+   139→(anonymous) @ inpage.js:1
+   140→(anonymous) @ inpage.js:1
+   141→Promise.then
+   142→(anonymous) @ inpage.js:1
+   143→(anonymous) @ inpage.js:1
+   144→(anonymous) @ inpage.js:1
+   145→(anonymous) @ inpage.js:1
+   146→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   147→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   148→    at inpage.js:1:48628
+   149→    at new Promise (<anonymous>)
+   150→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   151→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   152→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   153→    at EthereumAdapter.registerEventListeners (inpage.js:1:1175857)
+   154→    at inpage.js:1:51484
+   155→    at Array.forEach (<anonymous>)
+   156→    at ProvidersManager.start (inpage.js:1:51355)
+   157→(anonymous) @ inpage.js:1
+   158→import_loglevel.default.error @ inpage.js:1
+   159→(anonymous) @ inpage.js:1
+   160→tryLoadBroadcastMessage @ inpage.js:1
+   161→getBroadcastMessage @ inpage.js:1
+   162→addListener @ inpage.js:1
+   163→registerEventListeners @ inpage.js:1
+   164→(anonymous) @ inpage.js:1
+   165→start @ inpage.js:1
+   166→init @ inpage.js:1
+   167→(anonymous) @ inpage.js:1
+   168→(anonymous) @ inpage.js:1
+   169→(anonymous) @ inpage.js:1
+   170→Promise.then
+   171→(anonymous) @ inpage.js:1
+   172→(anonymous) @ inpage.js:1
+   173→(anonymous) @ inpage.js:1
+   174→(anonymous) @ inpage.js:1
+   175→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   176→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   177→    at inpage.js:1:48628
+   178→    at new Promise (<anonymous>)
+   179→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   180→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   181→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   182→    at EthereumAdapter.registerEventListeners (inpage.js:1:1176166)
+   183→    at inpage.js:1:51484
+   184→    at Array.forEach (<anonymous>)
+   185→    at ProvidersManager.start (inpage.js:1:51355)
+   186→(anonymous) @ inpage.js:1
+   187→import_loglevel.default.error @ inpage.js:1
+   188→(anonymous) @ inpage.js:1
+   189→tryLoadBroadcastMessage @ inpage.js:1
+   190→getBroadcastMessage @ inpage.js:1
+   191→addListener @ inpage.js:1
+   192→registerEventListeners @ inpage.js:1
+   193→(anonymous) @ inpage.js:1
+   194→start @ inpage.js:1
+   195→init @ inpage.js:1
+   196→(anonymous) @ inpage.js:1
+   197→(anonymous) @ inpage.js:1
+   198→(anonymous) @ inpage.js:1
+   199→Promise.then
+   200→(anonymous) @ inpage.js:1
+   201→(anonymous) @ inpage.js:1
+   202→(anonymous) @ inpage.js:1
+   203→(anonymous) @ inpage.js:1
+   204→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   205→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   206→    at inpage.js:1:48628
+   207→    at new Promise (<anonymous>)
+   208→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   209→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   210→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   211→    at EthereumAdapter.registerEventListeners (inpage.js:1:1176499)
+   212→    at inpage.js:1:51484
+   213→    at Array.forEach (<anonymous>)
+   214→    at ProvidersManager.start (inpage.js:1:51355)
+   215→(anonymous) @ inpage.js:1
+   216→import_loglevel.default.error @ inpage.js:1
+   217→(anonymous) @ inpage.js:1
+   218→tryLoadBroadcastMessage @ inpage.js:1
+   219→getBroadcastMessage @ inpage.js:1
+   220→addListener @ inpage.js:1
+   221→registerEventListeners @ inpage.js:1
+   222→(anonymous) @ inpage.js:1
+   223→start @ inpage.js:1
+   224→init @ inpage.js:1
+   225→(anonymous) @ inpage.js:1
+   226→(anonymous) @ inpage.js:1
+   227→(anonymous) @ inpage.js:1
+   228→Promise.then
+   229→(anonymous) @ inpage.js:1
+   230→(anonymous) @ inpage.js:1
+   231→(anonymous) @ inpage.js:1
+   232→(anonymous) @ inpage.js:1
+   233→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   234→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   235→    at inpage.js:1:48628
+   236→    at new Promise (<anonymous>)
+   237→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   238→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   239→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   240→    at EthereumAdapter.registerEventListeners (inpage.js:1:1176647)
+   241→    at inpage.js:1:51484
+   242→    at Array.forEach (<anonymous>)
+   243→    at ProvidersManager.start (inpage.js:1:51355)
+   244→(anonymous) @ inpage.js:1
+   245→import_loglevel.default.error @ inpage.js:1
+   246→(anonymous) @ inpage.js:1
+   247→tryLoadBroadcastMessage @ inpage.js:1
+   248→getBroadcastMessage @ inpage.js:1
+   249→addListener @ inpage.js:1
+   250→registerEventListeners @ inpage.js:1
+   251→(anonymous) @ inpage.js:1
+   252→start @ inpage.js:1
+   253→init @ inpage.js:1
+   254→(anonymous) @ inpage.js:1
+   255→(anonymous) @ inpage.js:1
+   256→(anonymous) @ inpage.js:1
+   257→Promise.then
+   258→(anonymous) @ inpage.js:1
+   259→(anonymous) @ inpage.js:1
+   260→(anonymous) @ inpage.js:1
+   261→(anonymous) @ inpage.js:1
+   262→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   263→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   264→    at inpage.js:1:48628
+   265→    at new Promise (<anonymous>)
+   266→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   267→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   268→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   269→    at CosmosAdapter.registerEventListeners (inpage.js:1:116343)
+   270→    at inpage.js:1:51484
+   271→    at Array.forEach (<anonymous>)
+   272→    at ProvidersManager.start (inpage.js:1:51355)
+   273→(anonymous) @ inpage.js:1
+   274→import_loglevel.default.error @ inpage.js:1
+   275→(anonymous) @ inpage.js:1
+   276→tryLoadBroadcastMessage @ inpage.js:1
+   277→getBroadcastMessage @ inpage.js:1
+   278→addListener @ inpage.js:1
+   279→registerEventListeners @ inpage.js:1
+   280→(anonymous) @ inpage.js:1
+   281→start @ inpage.js:1
+   282→init @ inpage.js:1
+   283→(anonymous) @ inpage.js:1
+   284→(anonymous) @ inpage.js:1
+   285→(anonymous) @ inpage.js:1
+   286→Promise.then
+   287→(anonymous) @ inpage.js:1
+   288→(anonymous) @ inpage.js:1
+   289→(anonymous) @ inpage.js:1
+   290→(anonymous) @ inpage.js:1
+   291→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   292→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   293→    at inpage.js:1:48628
+   294→    at new Promise (<anonymous>)
+   295→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   296→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   297→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   298→    at CosmosAdapter.registerEventListeners (inpage.js:1:116442)
+   299→    at inpage.js:1:51484
+   300→    at Array.forEach (<anonymous>)
+   301→    at ProvidersManager.start (inpage.js:1:51355)
+   302→(anonymous) @ inpage.js:1
+   303→import_loglevel.default.error @ inpage.js:1
+   304→(anonymous) @ inpage.js:1
+   305→tryLoadBroadcastMessage @ inpage.js:1
+   306→getBroadcastMessage @ inpage.js:1
+   307→addListener @ inpage.js:1
+   308→registerEventListeners @ inpage.js:1
+   309→(anonymous) @ inpage.js:1
+   310→start @ inpage.js:1
+   311→init @ inpage.js:1
+   312→(anonymous) @ inpage.js:1
+   313→(anonymous) @ inpage.js:1
+   314→(anonymous) @ inpage.js:1
+   315→Promise.then
+   316→(anonymous) @ inpage.js:1
+   317→(anonymous) @ inpage.js:1
+   318→(anonymous) @ inpage.js:1
+   319→(anonymous) @ inpage.js:1
+   320→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   321→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   322→    at inpage.js:1:48628
+   323→    at new Promise (<anonymous>)
+   324→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   325→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   326→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   327→    at CosmosAdapter.registerEventListeners (inpage.js:1:116676)
+   328→    at inpage.js:1:51484
+   329→    at Array.forEach (<anonymous>)
+   330→    at ProvidersManager.start (inpage.js:1:51355)
+   331→(anonymous) @ inpage.js:1
+   332→import_loglevel.default.error @ inpage.js:1
+   333→(anonymous) @ inpage.js:1
+   334→tryLoadBroadcastMessage @ inpage.js:1
+   335→getBroadcastMessage @ inpage.js:1
+   336→addListener @ inpage.js:1
+   337→registerEventListeners @ inpage.js:1
+   338→(anonymous) @ inpage.js:1
+   339→start @ inpage.js:1
+   340→init @ inpage.js:1
+   341→(anonymous) @ inpage.js:1
+   342→(anonymous) @ inpage.js:1
+   343→(anonymous) @ inpage.js:1
+   344→Promise.then
+   345→(anonymous) @ inpage.js:1
+   346→(anonymous) @ inpage.js:1
+   347→(anonymous) @ inpage.js:1
+   348→(anonymous) @ inpage.js:1
+   349→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   350→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   351→    at inpage.js:1:48628
+   352→    at new Promise (<anonymous>)
+   353→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   354→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   355→    at ExtendedBroadcastMessage.emit (inpage.js:1:50042)
+   356→    at SolanaAdapter.setDefaultWallet (inpage.js:1:2132122)
+   357→    at SolanaAdapter.start (inpage.js:1:2130885)
+   358→    at inpage.js:1:51407
+   359→    at Array.forEach (<anonymous>)
+   360→(anonymous) @ inpage.js:1
+   361→import_loglevel.default.error @ inpage.js:1
+   362→(anonymous) @ inpage.js:1
+   363→tryLoadBroadcastMessage @ inpage.js:1
+   364→getBroadcastMessage @ inpage.js:1
+   365→emit @ inpage.js:1
+   366→setDefaultWallet @ inpage.js:1
+   367→start @ inpage.js:1
+   368→(anonymous) @ inpage.js:1
+   369→start @ inpage.js:1
+   370→init @ inpage.js:1
+   371→(anonymous) @ inpage.js:1
+   372→(anonymous) @ inpage.js:1
+   373→(anonymous) @ inpage.js:1
+   374→Promise.then
+   375→(anonymous) @ inpage.js:1
+   376→(anonymous) @ inpage.js:1
+   377→(anonymous) @ inpage.js:1
+   378→(anonymous) @ inpage.js:1
+   379→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   380→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   381→    at inpage.js:1:48628
+   382→    at new Promise (<anonymous>)
+   383→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   384→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   385→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   386→    at SolanaAdapter.registerEventListeners (inpage.js:1:2131290)
+   387→    at inpage.js:1:51484
+   388→    at Array.forEach (<anonymous>)
+   389→    at ProvidersManager.start (inpage.js:1:51355)
+   390→(anonymous) @ inpage.js:1
+   391→import_loglevel.default.error @ inpage.js:1
+   392→(anonymous) @ inpage.js:1
+   393→tryLoadBroadcastMessage @ inpage.js:1
+   394→getBroadcastMessage @ inpage.js:1
+   395→addListener @ inpage.js:1
+   396→registerEventListeners @ inpage.js:1
+   397→(anonymous) @ inpage.js:1
+   398→start @ inpage.js:1
+   399→init @ inpage.js:1
+   400→(anonymous) @ inpage.js:1
+   401→(anonymous) @ inpage.js:1
+   402→(anonymous) @ inpage.js:1
+   403→Promise.then
+   404→(anonymous) @ inpage.js:1
+   405→(anonymous) @ inpage.js:1
+   406→(anonymous) @ inpage.js:1
+   407→(anonymous) @ inpage.js:1
+   408→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   409→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   410→    at inpage.js:1:48628
+   411→    at new Promise (<anonymous>)
+   412→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   413→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   414→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   415→    at SolanaAdapter.registerEventListeners (inpage.js:1:2131416)
+   416→    at inpage.js:1:51484
+   417→    at Array.forEach (<anonymous>)
+   418→    at ProvidersManager.start (inpage.js:1:51355)
+   419→(anonymous) @ inpage.js:1
+   420→import_loglevel.default.error @ inpage.js:1
+   421→(anonymous) @ inpage.js:1
+   422→tryLoadBroadcastMessage @ inpage.js:1
+   423→getBroadcastMessage @ inpage.js:1
+   424→addListener @ inpage.js:1
+   425→registerEventListeners @ inpage.js:1
+   426→(anonymous) @ inpage.js:1
+   427→start @ inpage.js:1
+   428→init @ inpage.js:1
+   429→(anonymous) @ inpage.js:1
+   430→(anonymous) @ inpage.js:1
+   431→(anonymous) @ inpage.js:1
+   432→Promise.then
+   433→(anonymous) @ inpage.js:1
+   434→(anonymous) @ inpage.js:1
+   435→(anonymous) @ inpage.js:1
+   436→(anonymous) @ inpage.js:1
+   437→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   438→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   439→    at inpage.js:1:48628
+   440→    at new Promise (<anonymous>)
+   441→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   442→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   443→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   444→    at SolanaAdapter.registerEventListeners (inpage.js:1:2131761)
+   445→    at inpage.js:1:51484
+   446→    at Array.forEach (<anonymous>)
+   447→    at ProvidersManager.start (inpage.js:1:51355)
+   448→(anonymous) @ inpage.js:1
+   449→import_loglevel.default.error @ inpage.js:1
+   450→(anonymous) @ inpage.js:1
+   451→tryLoadBroadcastMessage @ inpage.js:1
+   452→getBroadcastMessage @ inpage.js:1
+   453→addListener @ inpage.js:1
+   454→registerEventListeners @ inpage.js:1
+   455→(anonymous) @ inpage.js:1
+   456→start @ inpage.js:1
+   457→init @ inpage.js:1
+   458→(anonymous) @ inpage.js:1
+   459→(anonymous) @ inpage.js:1
+   460→(anonymous) @ inpage.js:1
+   461→Promise.then
+   462→(anonymous) @ inpage.js:1
+   463→(anonymous) @ inpage.js:1
+   464→(anonymous) @ inpage.js:1
+   465→(anonymous) @ inpage.js:1
+   466→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   467→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   468→    at inpage.js:1:48628
+   469→    at new Promise (<anonymous>)
+   470→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   471→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   472→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   473→    at BinanceWeb3Provider.registerEventListeners (inpage.js:1:63901)
+   474→    at inpage.js:1:51484
+   475→    at Array.forEach (<anonymous>)
+   476→    at ProvidersManager.start (inpage.js:1:51355)
+   477→(anonymous) @ inpage.js:1
+   478→import_loglevel.default.error @ inpage.js:1
+   479→(anonymous) @ inpage.js:1
+   480→tryLoadBroadcastMessage @ inpage.js:1
+   481→getBroadcastMessage @ inpage.js:1
+   482→addListener @ inpage.js:1
+   483→registerEventListeners @ inpage.js:1
+   484→(anonymous) @ inpage.js:1
+   485→start @ inpage.js:1
+   486→init @ inpage.js:1
+   487→(anonymous) @ inpage.js:1
+   488→(anonymous) @ inpage.js:1
+   489→(anonymous) @ inpage.js:1
+   490→Promise.then
+   491→(anonymous) @ inpage.js:1
+   492→(anonymous) @ inpage.js:1
+   493→(anonymous) @ inpage.js:1
+   494→(anonymous) @ inpage.js:1
+   495→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   496→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   497→    at inpage.js:1:48628
+   498→    at new Promise (<anonymous>)
+   499→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   500→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   501→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   502→    at BinanceWeb3Provider.registerEventListeners (inpage.js:1:64100)
+   503→    at inpage.js:1:51484
+   504→    at Array.forEach (<anonymous>)
+   505→    at ProvidersManager.start (inpage.js:1:51355)
+   506→(anonymous) @ inpage.js:1
+   507→import_loglevel.default.error @ inpage.js:1
+   508→(anonymous) @ inpage.js:1
+   509→tryLoadBroadcastMessage @ inpage.js:1
+   510→getBroadcastMessage @ inpage.js:1
+   511→addListener @ inpage.js:1
+   512→registerEventListeners @ inpage.js:1
+   513→(anonymous) @ inpage.js:1
+   514→start @ inpage.js:1
+   515→init @ inpage.js:1
+   516→(anonymous) @ inpage.js:1
+   517→(anonymous) @ inpage.js:1
+   518→(anonymous) @ inpage.js:1
+   519→Promise.then
+   520→(anonymous) @ inpage.js:1
+   521→(anonymous) @ inpage.js:1
+   522→(anonymous) @ inpage.js:1
+   523→(anonymous) @ inpage.js:1
+   524→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   525→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   526→    at inpage.js:1:48628
+   527→    at new Promise (<anonymous>)
+   528→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   529→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   530→    at ExtendedBroadcastMessage.emit (inpage.js:1:50042)
+   531→    at TonAdapter.start (inpage.js:1:2620734)
+   532→    at inpage.js:1:51407
+   533→    at Array.forEach (<anonymous>)
+   534→    at ProvidersManager.start (inpage.js:1:51355)
+   535→(anonymous) @ inpage.js:1
+   536→import_loglevel.default.error @ inpage.js:1
+   537→(anonymous) @ inpage.js:1
+   538→tryLoadBroadcastMessage @ inpage.js:1
+   539→getBroadcastMessage @ inpage.js:1
+   540→emit @ inpage.js:1
+   541→start @ inpage.js:1
+   542→(anonymous) @ inpage.js:1
+   543→start @ inpage.js:1
+   544→init @ inpage.js:1
+   545→(anonymous) @ inpage.js:1
+   546→(anonymous) @ inpage.js:1
+   547→(anonymous) @ inpage.js:1
+   548→Promise.then
+   549→(anonymous) @ inpage.js:1
+   550→(anonymous) @ inpage.js:1
+   551→(anonymous) @ inpage.js:1
+   552→(anonymous) @ inpage.js:1
+   553→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   554→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   555→    at inpage.js:1:48628
+   556→    at new Promise (<anonymous>)
+   557→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   558→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   559→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   560→    at TonAdapter.registerEventListeners (inpage.js:1:2621047)
+   561→    at inpage.js:1:51484
+   562→    at Array.forEach (<anonymous>)
+   563→    at ProvidersManager.start (inpage.js:1:51355)
+   564→(anonymous) @ inpage.js:1
+   565→import_loglevel.default.error @ inpage.js:1
+   566→(anonymous) @ inpage.js:1
+   567→tryLoadBroadcastMessage @ inpage.js:1
+   568→getBroadcastMessage @ inpage.js:1
+   569→addListener @ inpage.js:1
+   570→registerEventListeners @ inpage.js:1
+   571→(anonymous) @ inpage.js:1
+   572→start @ inpage.js:1
+   573→init @ inpage.js:1
+   574→(anonymous) @ inpage.js:1
+   575→(anonymous) @ inpage.js:1
+   576→(anonymous) @ inpage.js:1
+   577→Promise.then
+   578→(anonymous) @ inpage.js:1
+   579→(anonymous) @ inpage.js:1
+   580→(anonymous) @ inpage.js:1
+   581→(anonymous) @ inpage.js:1
+   582→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   583→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   584→    at inpage.js:1:48628
+   585→    at new Promise (<anonymous>)
+   586→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   587→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   588→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   589→    at TonAdapter.registerEventListeners (inpage.js:1:2621146)
+   590→    at inpage.js:1:51484
+   591→    at Array.forEach (<anonymous>)
+   592→    at ProvidersManager.start (inpage.js:1:51355)
+   593→(anonymous) @ inpage.js:1
+   594→import_loglevel.default.error @ inpage.js:1
+   595→(anonymous) @ inpage.js:1
+   596→tryLoadBroadcastMessage @ inpage.js:1
+   597→getBroadcastMessage @ inpage.js:1
+   598→addListener @ inpage.js:1
+   599→registerEventListeners @ inpage.js:1
+   600→(anonymous) @ inpage.js:1
+   601→start @ inpage.js:1
+   602→init @ inpage.js:1
+   603→(anonymous) @ inpage.js:1
+   604→(anonymous) @ inpage.js:1
+   605→(anonymous) @ inpage.js:1
+   606→Promise.then
+   607→(anonymous) @ inpage.js:1
+   608→(anonymous) @ inpage.js:1
+   609→(anonymous) @ inpage.js:1
+   610→(anonymous) @ inpage.js:1
+   611→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   612→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   613→    at inpage.js:1:48628
+   614→    at new Promise (<anonymous>)
+   615→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   616→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   617→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   618→    at TonAdapter.registerEventListeners (inpage.js:1:2621430)
+   619→    at inpage.js:1:51484
+   620→    at Array.forEach (<anonymous>)
+   621→    at ProvidersManager.start (inpage.js:1:51355)
+   622→(anonymous) @ inpage.js:1
+   623→import_loglevel.default.error @ inpage.js:1
+   624→(anonymous) @ inpage.js:1
+   625→tryLoadBroadcastMessage @ inpage.js:1
+   626→getBroadcastMessage @ inpage.js:1
+   627→addListener @ inpage.js:1
+   628→registerEventListeners @ inpage.js:1
+   629→(anonymous) @ inpage.js:1
+   630→start @ inpage.js:1
+   631→init @ inpage.js:1
+   632→(anonymous) @ inpage.js:1
+   633→(anonymous) @ inpage.js:1
+   634→(anonymous) @ inpage.js:1
+   635→Promise.then
+   636→(anonymous) @ inpage.js:1
+   637→(anonymous) @ inpage.js:1
+   638→(anonymous) @ inpage.js:1
+   639→(anonymous) @ inpage.js:1
+   640→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   641→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   642→    at inpage.js:1:48628
+   643→    at new Promise (<anonymous>)
+   644→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   645→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   646→    at ExtendedBroadcastMessage.emit (inpage.js:1:50042)
+   647→    at TronAdapter.setConnectionUrl (inpage.js:1:3582219)
+   648→    at TronAdapter.start (inpage.js:1:3582342)
+   649→    at inpage.js:1:51407
+   650→    at Array.forEach (<anonymous>)
+   651→(anonymous) @ inpage.js:1
+   652→import_loglevel.default.error @ inpage.js:1
+   653→(anonymous) @ inpage.js:1
+   654→tryLoadBroadcastMessage @ inpage.js:1
+   655→getBroadcastMessage @ inpage.js:1
+   656→emit @ inpage.js:1
+   657→setConnectionUrl @ inpage.js:1
+   658→start @ inpage.js:1
+   659→(anonymous) @ inpage.js:1
+   660→start @ inpage.js:1
+   661→init @ inpage.js:1
+   662→(anonymous) @ inpage.js:1
+   663→(anonymous) @ inpage.js:1
+   664→(anonymous) @ inpage.js:1
+   665→Promise.then
+   666→(anonymous) @ inpage.js:1
+   667→(anonymous) @ inpage.js:1
+   668→(anonymous) @ inpage.js:1
+   669→(anonymous) @ inpage.js:1
+   670→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   671→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   672→    at inpage.js:1:48628
+   673→    at new Promise (<anonymous>)
+   674→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   675→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   676→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   677→    at TronAdapter.registerEventListeners (inpage.js:1:3582765)
+   678→    at inpage.js:1:51484
+   679→    at Array.forEach (<anonymous>)
+   680→    at ProvidersManager.start (inpage.js:1:51355)
+   681→(anonymous) @ inpage.js:1
+   682→import_loglevel.default.error @ inpage.js:1
+   683→(anonymous) @ inpage.js:1
+   684→tryLoadBroadcastMessage @ inpage.js:1
+   685→getBroadcastMessage @ inpage.js:1
+   686→addListener @ inpage.js:1
+   687→registerEventListeners @ inpage.js:1
+   688→(anonymous) @ inpage.js:1
+   689→start @ inpage.js:1
+   690→init @ inpage.js:1
+   691→(anonymous) @ inpage.js:1
+   692→(anonymous) @ inpage.js:1
+   693→(anonymous) @ inpage.js:1
+   694→Promise.then
+   695→(anonymous) @ inpage.js:1
+   696→(anonymous) @ inpage.js:1
+   697→(anonymous) @ inpage.js:1
+   698→(anonymous) @ inpage.js:1
+   699→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   700→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   701→    at inpage.js:1:48628
+   702→    at new Promise (<anonymous>)
+   703→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   704→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   705→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   706→    at TronAdapter.registerEventListeners (inpage.js:1:3582927)
+   707→    at inpage.js:1:51484
+   708→    at Array.forEach (<anonymous>)
+   709→    at ProvidersManager.start (inpage.js:1:51355)
+   710→(anonymous) @ inpage.js:1
+   711→import_loglevel.default.error @ inpage.js:1
+   712→(anonymous) @ inpage.js:1
+   713→tryLoadBroadcastMessage @ inpage.js:1
+   714→getBroadcastMessage @ inpage.js:1
+   715→addListener @ inpage.js:1
+   716→registerEventListeners @ inpage.js:1
+   717→(anonymous) @ inpage.js:1
+   718→start @ inpage.js:1
+   719→init @ inpage.js:1
+   720→(anonymous) @ inpage.js:1
+   721→(anonymous) @ inpage.js:1
+   722→(anonymous) @ inpage.js:1
+   723→Promise.then
+   724→(anonymous) @ inpage.js:1
+   725→(anonymous) @ inpage.js:1
+   726→(anonymous) @ inpage.js:1
+   727→(anonymous) @ inpage.js:1
+   728→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   729→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   730→    at inpage.js:1:48628
+   731→    at new Promise (<anonymous>)
+   732→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   733→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   734→    at ExtendedBroadcastMessage.emit (inpage.js:1:50042)
+   735→    at BitcoinAdapter.setDefaultWallet (inpage.js:1:112252)
+   736→    at BitcoinAdapter.start (inpage.js:1:111171)
+   737→    at inpage.js:1:51407
+   738→    at Array.forEach (<anonymous>)
+   739→(anonymous) @ inpage.js:1
+   740→import_loglevel.default.error @ inpage.js:1
+   741→(anonymous) @ inpage.js:1
+   742→tryLoadBroadcastMessage @ inpage.js:1
+   743→getBroadcastMessage @ inpage.js:1
+   744→emit @ inpage.js:1
+   745→setDefaultWallet @ inpage.js:1
+   746→start @ inpage.js:1
+   747→(anonymous) @ inpage.js:1
+   748→start @ inpage.js:1
+   749→init @ inpage.js:1
+   750→(anonymous) @ inpage.js:1
+   751→(anonymous) @ inpage.js:1
+   752→(anonymous) @ inpage.js:1
+   753→Promise.then
+   754→(anonymous) @ inpage.js:1
+   755→(anonymous) @ inpage.js:1
+   756→(anonymous) @ inpage.js:1
+   757→(anonymous) @ inpage.js:1
+   758→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   759→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   760→    at inpage.js:1:48628
+   761→    at new Promise (<anonymous>)
+   762→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   763→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   764→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   765→    at BitcoinAdapter.registerEventListeners (inpage.js:1:111457)
+   766→    at inpage.js:1:51484
+   767→    at Array.forEach (<anonymous>)
+   768→    at ProvidersManager.start (inpage.js:1:51355)
+   769→(anonymous) @ inpage.js:1
+   770→import_loglevel.default.error @ inpage.js:1
+   771→(anonymous) @ inpage.js:1
+   772→tryLoadBroadcastMessage @ inpage.js:1
+   773→getBroadcastMessage @ inpage.js:1
+   774→addListener @ inpage.js:1
+   775→registerEventListeners @ inpage.js:1
+   776→(anonymous) @ inpage.js:1
+   777→start @ inpage.js:1
+   778→init @ inpage.js:1
+   779→(anonymous) @ inpage.js:1
+   780→(anonymous) @ inpage.js:1
+   781→(anonymous) @ inpage.js:1
+   782→Promise.then
+   783→(anonymous) @ inpage.js:1
+   784→(anonymous) @ inpage.js:1
+   785→(anonymous) @ inpage.js:1
+   786→(anonymous) @ inpage.js:1
+   787→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   788→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   789→    at inpage.js:1:48628
+   790→    at new Promise (<anonymous>)
+   791→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   792→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   793→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   794→    at BitcoinAdapter.registerEventListeners (inpage.js:1:111638)
+   795→    at inpage.js:1:51484
+   796→    at Array.forEach (<anonymous>)
+   797→    at ProvidersManager.start (inpage.js:1:51355)
+   798→(anonymous) @ inpage.js:1
+   799→import_loglevel.default.error @ inpage.js:1
+   800→(anonymous) @ inpage.js:1
+   801→tryLoadBroadcastMessage @ inpage.js:1
+   802→getBroadcastMessage @ inpage.js:1
+   803→addListener @ inpage.js:1
+   804→registerEventListeners @ inpage.js:1
+   805→(anonymous) @ inpage.js:1
+   806→start @ inpage.js:1
+   807→init @ inpage.js:1
+   808→(anonymous) @ inpage.js:1
+   809→(anonymous) @ inpage.js:1
+   810→(anonymous) @ inpage.js:1
+   811→Promise.then
+   812→(anonymous) @ inpage.js:1
+   813→(anonymous) @ inpage.js:1
+   814→(anonymous) @ inpage.js:1
+   815→(anonymous) @ inpage.js:1
+   816→inpage.js:1 [12:24:40] ERROR Error: IN_PAGE_CHANNEL_NODE_ID in-page-channel-node-id not found
+   817→    at ExtendedBroadcastMessage.initBroadcastMessage (inpage.js:1:49684)
+   818→    at inpage.js:1:48628
+   819→    at new Promise (<anonymous>)
+   820→    at ExtendedBroadcastMessage.tryLoadBroadcastMessage (inpage.js:1:48602)
+   821→    at ExtendedBroadcastMessage.getBroadcastMessage (inpage.js:1:48924)
+   822→    at ExtendedBroadcastMessage.addListener (inpage.js:1:49416)
+   823→    at BitcoinAdapter.registerEventListeners (inpage.js:1:111885)
+   824→    at inpage.js:1:51484
+   825→    at Array.forEach (<anonymous>)
+   826→    at ProvidersManager.start (inpage.js:1:51355)
+   827→(anonymous) @ inpage.js:1
+   828→import_loglevel.default.error @ inpage.js:1
+   829→(anonymous) @ inpage.js:1
+   830→tryLoadBroadcastMessage @ inpage.js:1
+   831→getBroadcastMessage @ inpage.js:1
+   832→addListener @ inpage.js:1
+   833→registerEventListeners @ inpage.js:1
+   834→(anonymous) @ inpage.js:1
+   835→start @ inpage.js:1
+   836→init @ inpage.js:1
+   837→(anonymous) @ inpage.js:1
+   838→(anonymous) @ inpage.js:1
+   839→(anonymous) @ inpage.js:1
+   840→Promise.then
+   841→(anonymous) @ inpage.js:1
+   842→(anonymous) @ inpage.js:1
+   843→(anonymous) @ inpage.js:1
+   844→(anonymous) @ inpage.js:1
+   845→(index):1  GET chrome-extension://nfmlkliedggdodlbgghmmchhgckjoaml/web_accessible_resources/googlesyndication_adsbygoogle.js net::ERR_FILE_NOT_FOUND
+   846→sharebx.js:8 1
+   847→sharebx.js:20 1
+   848→css.js:368 cssjs
+   849→de2e26ab072db058.js:1 Uncaught Error: Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+   850→    at rK (de2e26ab072db058.js:1:45805)
+   851→    at io (de2e26ab072db058.js:1:96526)
+   852→    at sc (de2e26ab072db058.js:1:136997)
+   853→    at de2e26ab072db058.js:1:131887
+   854→    at u9 (de2e26ab072db058.js:1:131988)
+   855→    at sV (de2e26ab072db058.js:1:158370)
+   856→    at O (de2e26ab072db058.js:1:7336)
+   857→    at run (inpage.js:1:1898085)
+   858→    at runIfPresent (inpage.js:1:1898212)
+   859→    at onGlobalMessage (inpage.js:1:1897412)
+   860→rK @ de2e26ab072db058.js:1
+   861→io @ de2e26ab072db058.js:1
+   862→sc @ de2e26ab072db058.js:1
+   863→(anonymous) @ de2e26ab072db058.js:1
+   864→u9 @ de2e26ab072db058.js:1
+   865→sV @ de2e26ab072db058.js:1
+   866→O @ de2e26ab072db058.js:1
+   867→run @ inpage.js:1
+   868→runIfPresent @ inpage.js:1
+   869→onGlobalMessage @ inpage.js:1
+   870→postMessage
+   871→se @ inpage.js:1
+   872→setImmediate @ inpage.js:1
+   873→i @ de2e26ab072db058.js:1
+   874→O @ de2e26ab072db058.js:1
+   875→run @ inpage.js:1
+   876→runIfPresent @ inpage.js:1
+   877→onGlobalMessage @ inpage.js:1
+   878→postMessage
+   879→se @ inpage.js:1
+   880→setImmediate @ inpage.js:1
+   881→i @ de2e26ab072db058.js:1
+   882→O @ de2e26ab072db058.js:1
+   883→run @ inpage.js:1
+   884→runIfPresent @ inpage.js:1
+   885→onGlobalMessage @ inpage.js:1
+   886→postMessage
+   887→se @ inpage.js:1
+   888→setImmediate @ inpage.js:1
+   889→i @ de2e26ab072db058.js:1
+   890→O @ de2e26ab072db058.js:1
+   891→run @ inpage.js:1
+   892→runIfPresent @ inpage.js:1
+   893→onGlobalMessage @ inpage.js:1
+   894→postMessage
+   895→se @ inpage.js:1
+   896→setImmediate @ inpage.js:1
+   897→i @ de2e26ab072db058.js:1
+   898→O @ de2e26ab072db058.js:1
+   899→run @ inpage.js:1
+   900→runIfPresent @ inpage.js:1
+   901→onGlobalMessage @ inpage.js:1
+   902→postMessage
+   903→se @ inpage.js:1
+   904→setImmediate @ inpage.js:1
+   905→i @ de2e26ab072db058.js:1
+   906→O @ de2e26ab072db058.js:1
+   907→run @ inpage.js:1
+   908→runIfPresent @ inpage.js:1
+   909→onGlobalMessage @ inpage.js:1
+   910→postMessage
+   911→se @ inpage.js:1
+   912→setImmediate @ inpage.js:1
+   913→i @ de2e26ab072db058.js:1
+   914→O @ de2e26ab072db058.js:1
+   915→run @ inpage.js:1
+   916→runIfPresent @ inpage.js:1
+   917→onGlobalMessage @ inpage.js:1
+   918→postMessage
+   919→se @ inpage.js:1
+   920→setImmediate @ inpage.js:1
+   921→i @ de2e26ab072db058.js:1
+   922→O @ de2e26ab072db058.js:1
+   923→run @ inpage.js:1
+   924→runIfPresent @ inpage.js:1
+   925→onGlobalMessage @ inpage.js:1
+   926→postMessage
+   927→se @ inpage.js:1
+   928→setImmediate @ inpage.js:1
+   929→i @ de2e26ab072db058.js:1
+   930→n.unstable_scheduleCallback @ de2e26ab072db058.js:1
+   931→sB @ de2e26ab072db058.js:1
+   932→sU @ de2e26ab072db058.js:1
+   933→(anonymous) @ de2e26ab072db058.js:1
+   934→c0e8fb0593e7abf0.js:13 Uncaught TypeError: Cannot read properties of null (reading 'price')
+   935→    at hX (c0e8fb0593e7abf0.js:13:26356)
+   936→    at av (de2e26ab072db058.js:1:62271)
+   937→    at oY (de2e26ab072db058.js:1:82544)
+   938→    at io (de2e26ab072db058.js:1:93976)
+   939→    at sc (de2e26ab072db058.js:1:136997)
+   940→    at de2e26ab072db058.js:1:136842
+   941→    at ss (de2e26ab072db058.js:1:136850)
+   942→    at u9 (de2e26ab072db058.js:1:132775)
+   943→    at sV (de2e26ab072db058.js:1:158370)
+   944→    at O (de2e26ab072db058.js:1:7336)

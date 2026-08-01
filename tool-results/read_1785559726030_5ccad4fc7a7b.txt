@@ -1,0 +1,557 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useState, useEffect, useRef, useCallback } from "react";
+     4→     4→import { motion, AnimatePresence } from "framer-motion";
+     5→     5→import {
+     6→     6→  Copy, Check, Loader2, CheckCircle2, Clock, Coins, Mail,
+     7→     7→  ExternalLink, ArrowLeft, Zap, Download, FileArchive, Radio,
+     8→     8→} from "lucide-react";
+     9→     9→import {
+    10→    10→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+    11→    11→} from "@/components/ui/dialog";
+    12→    12→import { Button } from "@/components/ui/button";
+    13→    13→import { Input } from "@/components/ui/input";
+    14→    14→import { Label } from "@/components/ui/label";
+    15→    15→import { useZev } from "@/lib/store";
+    16→    16→import { usePrices } from "@/hooks/use-data";
+    17→    17→import { ItemImage } from "@/components/site/item-image";
+    18→    18→import { toast } from "sonner";
+    19→    19→import { cn } from "@/lib/utils";
+    20→    20→
+    21→    21→type Step = "details" | "pay" | "success";
+    22→    22→
+    23→    23→// Safely parse a fetch response as JSON — never throws
+    24→    24→async function safeJson(res: Response): Promise<any> {
+    25→    25→  try {
+    26→    26→    const text = await res.text();
+    27→    27→    if (!text) return {};
+    28→    28→    return JSON.parse(text);
+    29→    29→  } catch {
+    30→    30→    return {};
+    31→    31→  }
+    32→    32→}
+    33→    33→
+    34→    34→export function CheckoutModal() {
+    35→    35→  const { checkoutOpen, checkoutTarget, closeCheckout } = useZev();
+    36→    36→  const { data: pricesData } = usePrices();
+    37→    37→
+    38→    38→  const [step, setStep] = useState<Step>("details");
+    39→    39→  const [method, setMethod] = useState<string>("LTC");
+    40→    40→  const [email, setEmail] = useState("");
+    41→    41→  const [discord, setDiscord] = useState("");
+    42→    42→  const [orderId, setOrderId] = useState<string | null>(null);
+    43→    43→  const [cryptoAmount, setCryptoAmount] = useState(0);
+    44→    44→  const [address, setAddress] = useState("");
+    45→    45→  const [creating, setCreating] = useState(false);
+    46→    46→  const [delivered, setDelivered] = useState<string | null>(null);
+    47→    47→  const [deliveredFile, setDeliveredFile] = useState<{ name: string; size: number | null } | null>(null);
+    48→    48→  const [copied, setCopied] = useState<string | null>(null);
+    49→    49→  const [emailSent, setEmailSent] = useState(false);
+    50→    50→
+    51→    51→  // Auto-polling — with a separate "checking" state so the UI stays responsive
+    52→    52→  const [pollCount, setPollCount] = useState(0);
+    53→    53→  const [foundTx, setFoundTx] = useState(false);
+    54→    54→  const [checking, setChecking] = useState(false); // true WHILE a check fetch is in-flight
+    55→    55→  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    56→    56→  const orderIdRef = useRef<string | null>(null);
+    57→    57→  const isPollingRef = useRef(false);
+    58→    58→
+    59→    59→  const target = checkoutTarget;
+    60→    60→  const isFree = target?.price === 0;
+    61→    61→
+    62→    62→  // Check for stored discount from redeemed codes
+    63→    63→  const [discountPct, setDiscountPct] = useState(0);
+    64→    64→  const [discountCode, setDiscountCode] = useState<string | null>(null);
+    65→    65→
+    66→    66→  useEffect(() => {
+    67→    67→    try {
+    68→    68→      const stored = localStorage.getItem("zev-discount");
+    69→    69→      if (stored) {
+    70→    70→        const parsed = JSON.parse(stored);
+    71→    71→        if (parsed.pct > 0) {
+    72→    72→          setDiscountPct(parsed.pct);
+    73→    73→          setDiscountCode(parsed.code || null);
+    74→    74→        }
+    75→    75→      }
+    76→    76→    } catch {}
+    77→    77→  }, [checkoutOpen]);
+    78→    78→
+    79→    79→  // Calculate discounted price
+    80→    80→  const originalPrice = target?.price || 0;
+    81→    81→  const discountedPrice = discountPct > 0 ? originalPrice * (1 - discountPct / 100) : originalPrice;
+    82→    82→  const effectivePrice = isFree ? 0 : discountedPrice;
+    83→    83→
+    84→    84→  const methods = pricesData?.methods ?? [];
+    85→    85→  const prices = pricesData?.prices ?? {};
+    86→    86→  const selectedMethod = methods.find((m) => m.id === method);
+    87→    87→
+    88→    88→  const stopPolling = useCallback(() => {
+    89→    89→    isPollingRef.current = false;
+    90→    90→    if (pollTimer.current) {
+    91→    91→      clearTimeout(pollTimer.current);
+    92→    92→      pollTimer.current = null;
+    93→    93→    }
+    94→    94→    setChecking(false);
+    95→    95→  }, []);
+    96→    96→
+    97→    97→  useEffect(() => {
+    98→    98→    if (checkoutOpen) {
+    99→    99→      setStep("details");
+   100→   100→      setMethod("LTC");
+   101→   101→      setOrderId(null);
+   102→   102→      setDelivered(null);
+   103→   103→      setDeliveredFile(null);
+   104→   104→      setPollCount(0);
+   105→   105→      setFoundTx(false);
+   106→   106→      setChecking(false);
+   107→   107→      setEmailSent(false);
+   108→   108→      isPollingRef.current = false;
+   109→   109→    } else {
+   110→   110→      stopPolling();
+   111→   111→    }
+   112→   112→  }, [checkoutOpen, checkoutTarget, stopPolling]);
+   113→   113→
+   114→   114→  useEffect(() => () => stopPolling(), [stopPolling]);
+   115→   115→
+   116→   116→  async function handleContinue() {
+   117→   117→    if (!target) return;
+   118→   118→    setCreating(true);
+   119→   119→    try {
+   120→   120→      const res = await fetch("/api/orders", {
+   121→   121→        method: "POST",
+   122→   122→        headers: { "Content-Type": "application/json" },
+   123→   123→        body: JSON.stringify({
+   124→   124→          itemType: target.itemType,
+   125→   125→          itemId: target.itemId,
+   126→   126→          paymentMethod: method,
+   127→   127→          buyerEmail: email || undefined,
+   128→   128→          buyerDiscord: discord || undefined,
+   129→   129→          discountCode: discountCode || undefined,
+   130→   130→        }),
+   131→   131→      });
+   132→   132→      const data = await safeJson(res);
+   133→   133→      if (!res.ok) throw new Error(data.error || "Failed to create order");
+   134→   134→      setOrderId(data.order.id);
+   135→   135→      orderIdRef.current = data.order.id;
+   136→   136→      setCryptoAmount(data.order.cryptoAmount);
+   137→   137→      const methodInfo = methods.find((mm) => mm.id === method);
+   138→   138→      setAddress(methodInfo?.address ?? "");
+   139→   139→      if (data.order.status === "paid" && data.order.deliveredContent) {
+   140→   140→        setDelivered(data.order.deliveredContent);
+   141→   141→        setDeliveredFile(data.file ?? null);
+   142→   142→        setEmailSent(!!data.emailSent);
+   143→   143→        setStep("success");
+   144→   144→      } else {
+   145→   145→        setStep("pay");
+   146→   146→        // Start auto-polling after a short delay
+   147→   147→        setTimeout(() => startPolling(data.order.id), 1500);
+   148→   148→      }
+   149→   149→    } catch (e) {
+   150→   150→      toast.error((e as Error).message);
+   151→   151→    } finally {
+   152→   152→      setCreating(false);
+   153→   153→    }
+   154→   154→  }
+   155→   155→
+   156→   156→  // Auto-polling loop — uses refs to avoid stale closures
+   157→   157→  const startPolling = useCallback((id: string) => {
+   158→   158→    if (isPollingRef.current) return;
+   159→   159→    isPollingRef.current = true;
+   160→   160→
+   161→   161→    const poll = async () => {
+   162→   162→      if (!isPollingRef.current) return;
+   163→   163→      setChecking(true);
+   164→   164→      try {
+   165→   165→        const res = await fetch(`/api/orders/${id}/check`);
+   166→   166→        const data = await safeJson(res);
+   167→   167→        if (!isPollingRef.current) return; // stopped during fetch
+   168→   168→        setPollCount((c) => c + 1);
+   169→   169→        if (data.verified) {
+   170→   170→          stopPolling();
+   171→   171→          setDelivered(data.delivered || "Payment auto-detected!");
+   172→   172→          setDeliveredFile(data.file ?? null);
+   173→   173→          setEmailSent(!!data.emailSent);
+   174→   174→          setStep("success");
+   175→   175→          toast.success("Payment detected! 🎉");
+   176→   176→          // Clear discount after successful purchase
+   177→   177→          localStorage.removeItem("zev-discount");
+   178→   178→          setDiscountPct(0);
+   179→   179→          setDiscountCode(null);
+   180→   180→          return;
+   181→   181→        }
+   182→   182→        if (data.found) {
+   183→   183→          setFoundTx(true);
+   184→   184→        }
+   185→   185→      } catch {
+   186→   186→        /* keep trying */
+   187→   187→      } finally {
+   188→   188→        if (isPollingRef.current) setChecking(false);
+   189→   189→      }
+   190→   190→      // Schedule next poll — only if still polling
+   191→   191→      if (isPollingRef.current) {
+   192→   192→        pollTimer.current = setTimeout(poll, 8000);
+   193→   193→      }
+   194→   194→    };
+   195→   195→    poll();
+   196→   196→  }, [stopPolling]);
+   197→   197→
+   198→   198→  // Manual check button
+   199→   199→  async function checkNow() {
+   200→   200→    if (!orderId || checking) return;
+   201→   201→    setChecking(true);
+   202→   202→    try {
+   203→   203→      const res = await fetch(`/api/orders/${orderId}/check`);
+   204→   204→      const data = await safeJson(res);
+   205→   205→      setPollCount((c) => c + 1);
+   206→   206→      if (data.verified) {
+   207→   207→        stopPolling();
+   208→   208→        setDelivered(data.delivered || "Payment verified!");
+   209→   209→        setDeliveredFile(data.file ?? null);
+   210→   210→        setEmailSent(!!data.emailSent);
+   211→   211→        setStep("success");
+   212→   212→        toast.success("Payment detected! 🎉");
+   213→   213→      } else {
+   214→   214→        if (data.found) setFoundTx(true);
+   215→   215→        toast.info(data.found ? "Transaction detected — confirming..." : "No payment detected yet");
+   216→   216→      }
+   217→   217→    } catch (e) {
+   218→   218→      toast.error((e as Error).message);
+   219→   219→    } finally {
+   220→   220→      setChecking(false);
+   221→   221→    }
+   222→   222→  }
+   223→   223→
+   224→   224→  function copy(text: string, label: string) {
+   225→   225→    navigator.clipboard.writeText(text);
+   226→   226→    setCopied(label);
+   227→   227→    toast.success(`${label} copied`);
+   228→   228→    setTimeout(() => setCopied(null), 2000);
+   229→   229→  }
+   230→   230→
+   231→   231→  return (
+   232→   232→    <Dialog open={checkoutOpen} onOpenChange={(o) => !o && closeCheckout()}>
+   233→   233→      <DialogContent className="max-w-md overflow-hidden border-border/40 bg-card/95 p-0 backdrop-blur-2xl">
+   234→   234→        <DialogHeader className="border-b border-border/40 p-5">
+   235→   235→          <DialogTitle className="flex items-center gap-2 text-lg">
+   236→   236→            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-gold">
+   237→   237→              <Zap className="h-4 w-4 text-black" />
+   238→   238→            </div>
+   239→   239→            Zev Checkout
+   240→   240→          </DialogTitle>
+   241→   241→          <DialogDescription className="mt-1 text-xs">
+   242→   242→            {step === "success" ? "Complete" : isFree ? "Free delivery" : "Auto-detect payment · instant delivery"}
+   243→   243→          </DialogDescription>
+   244→   244→        </DialogHeader>
+   245→   245→
+   246→   246→        {target && (
+   247→   247→          <div className="max-h-[75vh] overflow-y-auto">
+   248→   248→            {/* Item summary — compact */}
+   249→   249→            <div className="flex items-center gap-3 border-b border-border/40 p-4">
+   250→   250→              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg glass ring-1 ring-border/40">
+   251→   251→                <ItemImage src={target.image} alt={target.name} seed={target.name} />
+   252→   252→              </div>
+   253→   253→              <div className="min-w-0 flex-1">
+   254→   254→                <h3 className="truncate text-sm font-bold">{target.name}</h3>
+   255→   255→                <div className="mt-0.5 flex items-center gap-2">
+   256→   256→                  {isFree ? (
+   257→   257→                    <span className="text-xs font-bold text-emerald-glow">FREE</span>
+   258→   258→                  ) : (
+   259→   259→                    <span className="text-base font-bold text-gold">${target.price.toFixed(2)}</span>
+   260→   260→                  )}
+   261→   261→                </div>
+   262→   262→              </div>
+   263→   263→              {selectedMethod && !isFree && step === "pay" && (
+   264→   264→                <div className="text-right">
+   265→   265→                  <div className="text-xs text-muted-foreground">{selectedMethod.symbol}</div>
+   266→   266→                  <div className="text-sm font-bold" style={{ color: selectedMethod.color }}>
+   267→   267→                    {cryptoAmount.toFixed(method === "BTC" || method === "LTC" ? 6 : 4)}
+   268→   268→                  </div>
+   269→   269→                </div>
+   270→   270→              )}
+   271→   271→            </div>
+   272→   272→
+   273→   273→            <div className="p-5">
+   274→   274→              {/* STEP 1: Details + method */}
+   275→   275→              {step === "details" && (
+   276→   276→                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+   277→   277→                  <div>
+   278→   278→                    <Label className="text-xs"><Mail className="inline h-3 w-3 mr-1" />Email for delivery</Label>
+   279→   279→                    <Input value={email} onChange={(e)=>setEmail(e.target.value)} className="glass mt-1" placeholder="you@email.com" type="email" />
+   280→   280→                  </div>
+   281→   281→                  <div>
+   282→   282→                    <Label className="text-xs">Discord (optional)</Label>
+   283→   283→                    <Input value={discord} onChange={(e)=>setDiscord(e.target.value)} className="glass mt-1" placeholder="username" />
+   284→   284→                  </div>
+   285→   285→
+   286→   286→                  {!isFree && (
+   287→   287→                    <div>
+   288→   288→                      <Label className="mb-2 block text-xs">Payment Method</Label>
+   289→   289→                      <div className="grid grid-cols-2 gap-2">
+   290→   290→                        {methods.map((m) => (
+   291→   291→                          <button
+   292→   292→                            key={m.id}
+   293→   293→                            onClick={() => setMethod(m.id)}
+   294→   294→                            className={cn(
+   295→   295→                              "flex items-center gap-2 rounded-lg p-2.5 ring-1 transition-all",
+   296→   296→                              method === m.id
+   297→   297→                                ? "bg-accent/40 ring-gold"
+   298→   298→                                : "glass ring-border/40 hover:ring-border"
+   299→   299→                            )}
+   300→   300→                          >
+   301→   301→                            <span className="text-sm font-bold" style={{ color: m.color }}>{m.symbol}</span>
+   302→   302→                            <span className="text-xs text-muted-foreground truncate">{m.name}</span>
+   303→   303→                          </button>
+   304→   304→                        ))}
+   305→   305→                      </div>
+   306→   306→                    </div>
+   307→   307→                  )}
+   308→   308→
+   309→   309→                  {!isFree && selectedMethod && (
+   310→   310→                    <div className="rounded-lg bg-accent/20 p-3 text-sm">
+   311→   311→                      {discountPct > 0 && (
+   312→   312→                        <div className="flex justify-between mb-1 text-xs">
+   313→   313→                          <span className="text-muted-foreground">Original Price</span>
+   314→   314→                          <span className="text-muted-foreground line-through">${originalPrice.toFixed(2)}</span>
+   315→   315→                        </div>
+   316→   316→                      )}
+   317→   317→                      {discountPct > 0 && (
+   318→   318→                        <div className="flex justify-between mb-1 text-xs">
+   319→   319→                          <span className="text-emerald-glow">Discount ({discountPct}%)</span>
+   320→   320→                          <span className="text-emerald-glow">-${(originalPrice - discountedPrice).toFixed(2)}</span>
+   321→   321→                        </div>
+   322→   322→                      )}
+   323→   323→                      <div className="flex justify-between">
+   324→   324→                        <span className="text-muted-foreground">{discountPct > 0 ? "Discounted Total" : "Total"}</span>
+   325→   325→                        <span className="font-bold text-gold">
+   326→   326→                          {(effectivePrice / (prices[method] || 1)).toFixed(method === "BTC" || method === "LTC" ? 6 : 4)} {method}
+   327→   327→                        </span>
+   328→   328→                      </div>
+   329→   329→                      <div className="mt-0.5 flex justify-between text-xs text-muted-foreground">
+   330→   330→                        <span>= ${effectivePrice.toFixed(2)} USD</span>
+   331→   331→                        <span>1 {method} = ${(prices[method] ?? 0).toFixed(2)}</span>
+   332→   332→                      </div>
+   333→   333→                    </div>
+   334→   334→                  )}
+   335→   335→
+   336→   336→                  <Button onClick={handleContinue} disabled={creating} className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
+   337→   337→                    {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+   338→   338→                    {isFree ? "Get Free" : "Continue to Payment"}
+   339→   339→                  </Button>
+   340→   340→                </motion.div>
+   341→   341→              )}
+   342→   342→
+   343→   343→              {/* STEP 2: Pay — with proper loading animation */}
+   344→   344→              {step === "pay" && selectedMethod && (
+   345→   345→                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+   346→   346→                  {/* Live status indicator — always animated, never freezes */}
+   347→   347→                  <motion.div
+   348→   348→                    className={cn(
+   349→   349→                      "relative flex items-center gap-2.5 overflow-hidden rounded-lg p-3 text-sm ring-1",
+   350→   350→                      checking
+   351→   351→                        ? "bg-emerald-500/10 ring-emerald-glow/30"
+   352→   352→                        : foundTx
+   353→   353→                        ? "bg-blue-500/10 ring-blue-500/30"
+   354→   354→                        : "bg-amber-500/10 ring-amber-500/30"
+   355→   355→                    )}
+   356→   356→                  >
+   357→   357→                    {/* Animated pulse ring — pure CSS, never blocks */}
+   358→   358→                    <div className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+   359→   359→                      {checking ? (
+   360→   360→                        <Loader2 className="h-4 w-4 animate-spin text-emerald-glow" />
+   361→   361→                      ) : foundTx ? (
+   362→   362→                        <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+   363→   363→                      ) : (
+   364→   364→                        <Clock className="h-4 w-4 text-amber-400" />
+   365→   365→                      )}
+   366→   366→                      {/* Pulsing radio waves when checking */}
+   367→   367→                      {checking && (
+   368→   368→                        <>
+   369→   369→                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
+   370→   370→                          <Radio className="absolute h-3 w-3 text-emerald-glow animate-pulse" />
+   371→   371→                        </>
+   372→   372→                      )}
+   373→   373→                    </div>
+   374→   374→                    <div className="flex-1 min-w-0">
+   375→   375→                      <AnimatePresence mode="wait">
+   376→   376→                        <motion.div
+   377→   377→                          key={checking ? "checking" : foundTx ? "found" : "waiting"}
+   378→   378→                          initial={{ opacity: 0, y: 5 }}
+   379→   379→                          animate={{ opacity: 1, y: 0 }}
+   380→   380→                          exit={{ opacity: 0, y: -5 }}
+   381→   381→                          transition={{ duration: 0.2 }}
+   382→   382→                        >
+   383→   383→                          <span className={cn(
+   384→   384→                            "text-xs font-medium block",
+   385→   385→                            checking ? "text-emerald-200" : foundTx ? "text-blue-200" : "text-amber-200"
+   386→   386→                          )}>
+   387→   387→                            {checking
+   388→   388→                              ? "Scanning blockchain..."
+   389→   389→                              : foundTx
+   390→   390→                              ? "Transaction detected — confirming amount..."
+   391→   391→                              : "Waiting for payment"}
+   392→   392→                          </span>
+   393→   393→                        </motion.div>
+   394→   394→                      </AnimatePresence>
+   395→   395→                    </div>
+   396→   396→                    <span className="shrink-0 text-[10px] text-muted-foreground">
+   397→   397→                      {pollCount} {pollCount === 1 ? "check" : "checks"}
+   398→   398→                    </span>
+   399→   399→                  </motion.div>
+   400→   400→
+   401→   401→                  {/* Animated progress dots — pure CSS animation, always smooth */}
+   402→   402→                  <div className="flex items-center justify-center gap-1.5">
+   403→   403→                    {[0, 1, 2].map((i) => (
+   404→   404→                      <motion.span
+   405→   405→                        key={i}
+   406→   406→                        className="h-1.5 w-1.5 rounded-full bg-emerald-glow"
+   407→   407→                        animate={{ opacity: [0.2, 1, 0.2] }}
+   408→   408→                        transition={{
+   409→   409→                          duration: 1.2,
+   410→   410→                          repeat: Infinity,
+   411→   411→                          delay: i * 0.2,
+   412→   412→                          ease: "easeInOut",
+   413→   413→                        }}
+   414→   414→                      />
+   415→   415→                    ))}
+   416→   416→                    <span className="ml-2 text-[10px] text-muted-foreground">
+   417→   417→                      {checking ? "verifying..." : "auto-check every 8s"}
+   418→   418→                    </span>
+   419→   419→                  </div>
+   420→   420→
+   421→   421→                  {/* Send to address */}
+   422→   422→                  <div className="space-y-3">
+   423→   423→                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Send {selectedMethod.symbol} to</div>
+   424→   424→                    <div className="flex items-center gap-2">
+   425→   425→                      <code className="flex-1 truncate rounded-lg bg-background/80 px-3 py-2.5 text-xs font-mono text-emerald-glow ring-1 ring-border/40">
+   426→   426→                        {address}
+   427→   427→                      </code>
+   428→   428→                      <Button size="icon" variant="outline" className="shrink-0" onClick={() => copy(address, "Address")}>
+   429→   429→                        {copied === "Address" ? <Check className="h-4 w-4 text-emerald-glow" /> : <Copy className="h-4 w-4" />}
+   430→   430→                      </Button>
+   431→   431→                    </div>
+   432→   432→                  </div>
+   433→   433→
+   434→   434→                  {/* Exact amount */}
+   435→   435→                  <div className="space-y-3">
+   436→   436→                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Exact Amount</div>
+   437→   437→                    <div className="flex items-center gap-2">
+   438→   438→                      <div className="flex-1 rounded-lg bg-background/80 px-3 py-2.5 ring-1 ring-gold/30">
+   439→   439→                        <span className="font-mono text-base font-bold text-gold">
+   440→   440→                          {cryptoAmount.toFixed(method === "BTC" || method === "LTC" ? 8 : 6)}
+   441→   441→                        </span>
+   442→   442→                        <span className="ml-1 text-xs text-muted-foreground">{selectedMethod.symbol}</span>
+   443→   443→                      </div>
+   444→   444→                      <Button size="sm" variant="outline" className="shrink-0 gap-1" onClick={() => copy(cryptoAmount.toFixed(8), "Amount")}>
+   445→   445→                        {copied === "Amount" ? <Check className="h-3.5 w-3.5 text-emerald-glow" /> : <Copy className="h-3.5 w-3.5" />}
+   446→   446→                      </Button>
+   447→   447→                    </div>
+   448→   448→                    <div className="text-xs text-muted-foreground">≈ ${target.price.toFixed(2)} USD</div>
+   449→   449→                  </div>
+   450→   450→
+   451→   451→                  {/* Network */}
+   452→   452→                  <div className="flex items-center justify-between rounded-lg bg-background/40 px-3 py-2 text-xs">
+   453→   453→                    <span className="text-muted-foreground">Network</span>
+   454→   454→                    <span className="font-medium">{selectedMethod.chain}</span>
+   455→   455→                  </div>
+   456→   456→
+   457→   457→                  <a href={selectedMethod.explorer} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1 text-xs text-emerald-glow hover:underline">
+   458→   458→                    View on {selectedMethod.explorer.replace("https://","")} <ExternalLink className="h-3 w-3" />
+   459→   459→                  </a>
+   460→   460→
+   461→   461→                  {/* Info */}
+   462→   462→                  <div className="rounded-lg bg-emerald-500/5 p-3 text-xs text-muted-foreground ring-1 ring-emerald-glow/10">
+   463→   463→                    <p className="font-medium text-emerald-glow mb-1">⚡ Auto-detection active</p>
+   464→   464→                    <p>Send the exact amount from any wallet. We check the blockchain automatically every 8 seconds — your product delivers the moment your transaction appears (even pending).</p>
+   465→   465→                  </div>
+   466→   466→
+   467→   467→                  <Button onClick={checkNow} disabled={checking} variant="outline" className="w-full gap-2 text-xs">
+   468→   468→                    {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5" />}
+   469→   469→                    {checking ? "Checking..." : `Check now (${pollCount})`}
+   470→   470→                  </Button>
+   471→   471→
+   472→   472→                  <button onClick={() => { stopPolling(); setStep("details"); }} className="flex w-full items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+   473→   473→                    <ArrowLeft className="h-3 w-3" /> Back
+   474→   474→                  </button>
+   475→   475→                </motion.div>
+   476→   476→              )}
+   477→   477→
+   478→   478→              {/* STEP 3: Success */}
+   479→   479→              {step === "success" && (
+   480→   480→                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
+   481→   481→                  <div className="flex flex-col items-center text-center py-2">
+   482→   482→                    <motion.div
+   483→   483→                      initial={{ scale: 0 }}
+   484→   484→                      animate={{ scale: 1 }}
+   485→   485→                      transition={{ type: "spring", stiffness: 200, damping: 12 }}
+   486→   486→                      className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20 ring-2 ring-emerald-glow"
+   487→   487→                    >
+   488→   488→                      <CheckCircle2 className="h-8 w-8 text-emerald-glow" />
+   489→   489→                    </motion.div>
+   490→   490→                    <h3 className="mt-3 text-lg font-bold text-gradient-emerald">
+   491→   491→                      {isFree ? "Delivered!" : "Payment Detected!"}
+   492→   492→                    </h3>
+   493→   493→                    <p className="text-xs text-muted-foreground">
+   494→   494→                      {isFree ? "Your product is ready." : "Auto-verified on the blockchain."}
+   495→   495→                    </p>
+   496→   496→                  </div>
+   497→   497→
+   498→   498→                  {delivered && (
+   499→   499→                    <div className="rounded-lg glass p-3 ring-1 ring-emerald-glow/30">
+   500→   500→                      <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-emerald-glow">
+   501→   501→                        <Coins className="h-3.5 w-3.5" /> Your Purchase
+   502→   502→                      </div>
+   503→   503→                      <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2.5 text-xs font-mono">
+   504→   504→                        {delivered}
+   505→   505→                      </pre>
+   506→   506→                      <Button size="sm" variant="outline" className="mt-2 gap-1 text-xs" onClick={() => copy(delivered, "Content")}>
+   507→   507→                        {copied === "Content" ? <Check className="h-3 w-3 text-emerald-glow" /> : <Copy className="h-3 w-3" />} Copy
+   508→   508→                      </Button>
+   509→   509→                    </div>
+   510→   510→                  )}
+   511→   511→
+   512→   512→                  {deliveredFile && orderId && (
+   513→   513→                    <div className="rounded-lg glass p-3 ring-1 ring-gold/30">
+   514→   514→                      <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-gold">
+   515→   515→                        <FileArchive className="h-3.5 w-3.5" /> Attached File
+   516→   516→                      </div>
+   517→   517→                      <div className="flex items-center justify-between gap-2 rounded bg-background/60 px-2.5 py-2">
+   518→   518→                        <span className="truncate text-xs font-mono">{deliveredFile.name}</span>
+   519→   519→                        {typeof deliveredFile.size === "number" && deliveredFile.size > 0 && (
+   520→   520→                          <span className="shrink-0 text-[10px] text-muted-foreground">
+   521→   521→                            {deliveredFile.size < 1024 * 1024
+   522→   522→                              ? `${(deliveredFile.size / 1024).toFixed(0)} KB`
+   523→   523→                              : `${(deliveredFile.size / (1024 * 1024)).toFixed(1)} MB`}
+   524→   524→                          </span>
+   525→   525→                        )}
+   526→   526→                      </div>
+   527→   527→                      <Button asChild size="sm" className="mt-2 w-full gap-1.5 bg-gradient-to-r from-gold to-amber-400 text-black hover:from-amber-400 hover:to-gold text-xs">
+   528→   528→                        <a href={`/api/orders/${orderId}/download`} download={deliveredFile.name}>
+   529→   529→                          <Download className="h-3.5 w-3.5" /> Download ZIP
+   530→   530→                        </a>
+   531→   531→                      </Button>
+   532→   532→                    </div>
+   533→   533→                  )}
+   534→   534→
+   535→   535→                  {emailSent && (
+   536→   536→                    <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 p-2.5 text-xs text-emerald-200 ring-1 ring-emerald-glow/20">
+   537→   537→                      <Mail className="h-3.5 w-3.5" /> A copy was sent to your email.
+   538→   538→                    </div>
+   539→   539→                  )}
+   540→   540→
+   541→   541→                  <div className="rounded-lg bg-accent/20 p-2.5 text-center text-xs text-muted-foreground">
+   542→   542→                    💾 Your purchase is saved in <button onClick={() => { closeCheckout(); }} className="text-emerald-glow underline">My Orders</button> — you can re-download anytime.
+   543→   543→                  </div>
+   544→   544→
+   545→   545→                  <Button onClick={closeCheckout} className="w-full bg-gradient-to-r from-emerald-500 to-emerald-400 text-emerald-950">
+   546→   546→                    Done
+   547→   547→                  </Button>
+   548→   548→                </motion.div>
+   549→   549→              )}
+   550→   550→            </div>
+   551→   551→          </div>
+   552→   552→        )}
+   553→   553→      </DialogContent>
+   554→   554→    </Dialog>
+   555→   555→  );
+   556→   556→}
+   557→   557→

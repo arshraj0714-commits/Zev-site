@@ -1,0 +1,5 @@
+{
+  "buildCommand": "prisma db push --skip-generate && prisma generate && next build",
+  "installCommand": "bun install",
+  "framework": "nextjs"
+}
